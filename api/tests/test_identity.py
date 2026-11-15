@@ -56,8 +56,8 @@ def test_disabled_user_hidden_and_no_external_trunk_for_children(client, sandbox
     csrf = login(client, "owner", "owner-long-secret-value")
     provision.render_users()
     xml = (sandbox / "provision/directory/default.xml").read_text()
-    assert 'name="famicom_outbound_allowed" value="false"' in xml
-    assert 'name="famicom_outbound_allowed" value="true"' in xml
+    assert 'name="outbound_allowed" value="false"' in xml
+    assert 'name="outbound_allowed" value="true"' not in xml
     assert '<user id="1202">' in xml
     disabled = client.patch(f"/api/users/{child['id']}", json={"enabled":False}, headers={"x-csrf-token":csrf})
     assert disabled.status_code == 200
