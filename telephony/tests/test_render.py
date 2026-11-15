@@ -34,6 +34,8 @@ class TelephonyContracts(unittest.TestCase):
         root = ET.fromstring(document)
         self.assertEqual(root.tag, "include")
         self.assertNotIn(PASS, document)
+        self.assertIn("sofia_contact(", document)
+        self.assertEqual(root.find("./domain/params/param").get("name"), "dial-string")
         self.assertEqual([u.find("./variables/variable[@name='outbound_allowed']").get("value")
                           for u in root.findall(".//user")], ["false", "true"])
 

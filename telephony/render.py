@@ -119,6 +119,10 @@ class SipTrunk:
 def domain_element(domain: str, users) -> ET.Element:
     check(domain, DOMAIN, "SIP realm")
     root = ET.Element("domain", name=domain)
+    params = ET.SubElement(root, "params")
+    contact = fs_var("sofia_contact(" + fs_var("dialed_user") + "@" + fs_var("dialed_domain") + ")")
+    ET.SubElement(params, "param", name="dial-string",
+                  value="{presence_id=" + fs_var("dialed_user") + "@" + fs_var("dialed_domain") + "}" + contact)
     entries = ET.SubElement(ET.SubElement(ET.SubElement(root, "groups"), "group", name="default"), "users")
     seen_names, seen_exts = set(), set()
     for user in users:
