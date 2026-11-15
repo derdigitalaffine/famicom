@@ -165,6 +165,7 @@ cat > deploy/generated/freeswitch/event_socket.conf.xml <<EOF
   <settings>
     <param name="listen-ip" value="0.0.0.0"/>
     <param name="listen-port" value="8021"/>
+    <param name="apply-inbound-acl" value="localnet.auto"/>
     <param name="password" value="$esl"/>
   </settings>
 </configuration>
@@ -186,7 +187,7 @@ cat > deploy/generated/freeswitch/directory/default.xml <<EOF
     </params>
     <groups>
       <group name="default"><users>
-        <X-PRE-PROCESS cmd="include" data="directory/default/*.xml"/>
+        <X-PRE-PROCESS cmd="include" data="default/*.xml"/>
       </users></group>
     </groups>
   </domain>
@@ -195,7 +196,7 @@ EOF
 cat > deploy/generated/freeswitch/dialplan/default.xml <<'EOF'
 <include>
   <context name="default">
-    <X-PRE-PROCESS cmd="include" data="dialplan/default/*.xml"/>
+    <X-PRE-PROCESS cmd="include" data="default/*.xml"/>
   </context>
 </include>
 EOF
@@ -261,7 +262,7 @@ EOF
 cat > deploy/generated/freeswitch/sip_profiles/external.xml <<'EOF'
 <profile name="external">
   <aliases/>
-  <gateways><X-PRE-PROCESS cmd="include" data="sip_profiles/external/*.xml"/></gateways>
+  <gateways><X-PRE-PROCESS cmd="include" data="external/*.xml"/></gateways>
   <domains><domain name="all" alias="false" parse="false"/></domains>
   <settings>
     <param name="sip-ip" value="$${local_ip_v4}"/>

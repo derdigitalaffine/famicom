@@ -26,3 +26,6 @@
 
 ## Docker Compose file-backed secrets
 Docker Compose mounts host files as read-only secrets; file-backed mounts do not enforce the Swarm `uid`/`gid`/`mode` attributes. The bootstrap keeps `.secrets/` at mode 0700 (no other host account may traverse it) and the individual files at mode 0644 so the API (uid 10001) and Prosody can read them via their private mounts. Do **not** place `.secrets/` in a world-traversable directory, expose host shell users access to it, or mount the secrets into any additional container. On deployments with higher threat requirements replace local file-backed secrets with an external secret manager or root-to-tmpfs injection. Never add the secret directory to Git.
+
+## FreeSWITCH Event Socket and includes
+Generated FreeSWITCH `X-PRE-PROCESS cmd="include"` directives resolve **relative to their containing XML file**; the bootstrap emits `default/*.xml` and `external/*.xml` (not doubled prefix paths). ESL is reachable only on the internal Docker network and uses a random password. The `localnet.auto` ACL permits the API's internal subnet to trigger config reloads; the event socket is never published on host ports. Operators running `fs_cli` must supply the generated ESL password (not the unsafe default).
