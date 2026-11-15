@@ -14,7 +14,7 @@ PASS = "Many&SecretCharacters2026"
 
 
 def user(extension="1001", role="adult", outbound=False):
-    return SipUser("alice", extension, sip_ha1(extension, DOMAIN, PASS),
+    return SipUser("alice" if extension == "1001" else "bob", extension, sip_ha1(extension, DOMAIN, PASS),
                    role=role, outbound_allowed=outbound)
 
 
