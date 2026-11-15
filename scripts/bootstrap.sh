@@ -68,7 +68,11 @@ python3 -c 'import base64,os; print(base64.urlsafe_b64encode(os.urandom(32)).dec
 openssl req -x509 -newkey rsa:3072 -nodes -days 30 -subj "/CN=$domain" \
   -addext "subjectAltName=DNS:$domain,DNS:conference.$domain" \
   -keyout .secrets/xmpp_tls_key -out .secrets/xmpp_tls_cert >/dev/null 2>&1
-chmod 600 .secrets/*
+# Docker Compose (file-backed) secrets are bind mounts; the container UID differs
+# from the host UID. Restrict the parent directory to its owner (0700), while
+# allowing the unprivileged processes inside containers to read mounted files.
+chmod 700 .secrets
+chmod 644 .secrets/*
 esl=$(cat .secrets/esl)
 xmpp_auth=$(cat .secrets/xmpp_http)
 cat > .env <<EOF

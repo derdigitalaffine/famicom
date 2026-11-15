@@ -23,3 +23,6 @@
 - For browser SIP, Caddy proxies `/sip-ws` to FreeSWITCH's plain internal WebSocket listener; only HTTPS is publicly accessible.
 - Native SIP on 5060 is plaintext; bootstrap binds to loopback by default. Use WireGuard/Tailscale for remote native clients, or configure independently vetted SIPS/TLS.
 - The initial slice is an integration foundation, not a claim that every FreeSWITCH feature, video/OMEMO/push pathway has passed end-to-end tests.
+
+## Docker Compose file-backed secrets
+Docker Compose mounts host files as read-only secrets; file-backed mounts do not enforce the Swarm `uid`/`gid`/`mode` attributes. The bootstrap keeps `.secrets/` at mode 0700 (no other host account may traverse it) and the individual files at mode 0644 so the API (uid 10001) and Prosody can read them via their private mounts. Do **not** place `.secrets/` in a world-traversable directory, expose host shell users access to it, or mount the secrets into any additional container. On deployments with higher threat requirements replace local file-backed secrets with an external secret manager or root-to-tmpfs injection. Never add the secret directory to Git.
