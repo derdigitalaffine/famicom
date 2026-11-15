@@ -43,3 +43,6 @@ The first Foundation version issued three-digit extensions; the migration conver
 
 ### Consistent SIP digest realm
 Because the family SIP secret is stored as an `a1-hash` and cannot be recomputed for a different challenge realm, the internal Sofia profile must set `challenge-realm`, `sip-domain`, `force-register-domain`, and `force-register-db-domain` to the canonical family domain. See [FreeSWITCH Sofia documentation](https://developer.signalwire.com/freeswitch/users-and-endpoints/sip-profiles/). The live SIP smoke explicitly fails if the server challenges for a different realm; arbitrary client-selected realms must never be trusted.
+
+## Shared volume and process permissions
+The API publishes SIP directory XML as owner-writable/group-readable files with mode `0640`. The API entrypoint ensures every generated directory is mode `0750`; the FreeSWITCH container joins supplemental GID 10001 solely for read-only access to those files (the PBX mounts remain read-only). This avoids publishing password-equivalent HA1 digests to world-readable files.

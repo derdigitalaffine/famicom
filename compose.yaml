@@ -46,6 +46,9 @@ services:
     networks: [private]
 
   freeswitch:
+    # Supplementary group for API-owned 0640 generated PBX XML.
+    group_add:
+      - "10001"
     image: ${FAMICOM_FREESWITCH_IMAGE:-yukiosaka/freeswitch:latest}
     platform: linux/amd64
     restart: unless-stopped
