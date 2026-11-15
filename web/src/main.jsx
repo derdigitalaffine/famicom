@@ -73,7 +73,7 @@ function Family({ user, members, onRefresh }) {
   return <div className="page-frame">
     <Group justify="space-between" mb="xl"><Box><Text className="eyebrow">Miteinander verbunden</Text><Title order={2}>Deine Familie</Title></Box><Badge variant="light" size="lg">{members.length} Mitglieder</Badge></Group>
     <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="lg">
-      {members.map(member => <Card withBorder radius="xl" p="xl" className="surface-card member-card" key={member.id}>
+      {members.filter(member => member.enabled).map(member => <Card withBorder radius="xl" p="xl" className="surface-card member-card" key={member.id}>
         <Group align="start" wrap="nowrap">
           <Avatar size={54} radius="xl" color={member.role === 'child' ? 'grape' : member.role === 'admin' ? 'cyan' : 'blue'}>{member.display_name[0]?.toUpperCase()}</Avatar>
           <Stack gap={2} style={{ flex: 1, minWidth: 0 }}>
@@ -229,7 +229,7 @@ function App() {
   if (!config) return <Center mih="100vh"><Alert color="red" title="Server nicht erreichbar">{error || 'Konfiguration konnte nicht geladen werden.'}</Alert></Center>;
   if (!session) return <Login config={config} onLogin={(value, plain) => { setSession(value); setLoginPassword(plain); }}/>;
   const user = session.user;
-  const pages = NAV.filter(n => n.id !== 'settings' || true);
+  const pages = NAV;
   return <div className="app-layout">
     <aside className="desktop-sidebar">
       <div className="side-brand"><div className="brand-mark"><IconMessageCircle2 size={22}/></div><div><b>FamiCom</b><small>Zuhause verbunden</small></div></div>
@@ -248,7 +248,7 @@ function App() {
       <div className="mobile-header"><div className="mobile-brand"><div className="brand-mark"><IconMessageCircle2 size={20}/></div><b>FamiCom</b></div><Avatar color="blue" radius="xl" size="sm">{user.display_name[0]?.toUpperCase()}</Avatar></div>
       {error && <Alert color="red" withCloseButton onClose={() => setError('')} m="md">{error}</Alert>}
       {page === 'chat' && <Chat user={user} config={config} loginPassword={loginPassword}/>}
-      {page === 'calls' && <Calls user={user} config={config}/>}
+      <div style={{ display: page === 'calls' ? 'block' : 'none' }} aria-hidden={page !== 'calls'}><Calls user={user} config={config}/></div>
       {page === 'family' && <Family user={user} members={members} onRefresh={refreshMembers}/>}
       {page === 'settings' && <Settings user={user} csrf={session.csrf} config={config} members={members} onRefresh={refreshMembers} onSignOut={signOut}/>}
     </main>

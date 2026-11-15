@@ -10,10 +10,11 @@ services:
       FAMICOM_PROVISION_DIR: /provision
       FAMICOM_XMPP_AUTH_FILE: /run/secrets/xmpp_http
       FAMICOM_ESL_PASSWORD_FILE: /run/secrets/esl
+      FAMICOM_DB_KEY_FILE: /run/secrets/db_key
     volumes:
       - famicom-data:/data
       - ./deploy/generated/freeswitch:/provision
-    secrets: [xmpp_http, esl]
+    secrets: [xmpp_http, esl, db_key]
     expose: ["8000"]
     networks: [private]
     healthcheck:
@@ -95,6 +96,8 @@ secrets:
     file: ./.secrets/xmpp_http
   esl:
     file: ./.secrets/esl
+  db_key:
+    file: ./.secrets/db_key
 
 volumes:
   famicom-data:

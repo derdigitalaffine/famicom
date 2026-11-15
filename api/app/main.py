@@ -126,7 +126,7 @@ def logout(response: Response, request: Request, row=Depends(actor)):
 @app.get("/api/users")
 def users(row=Depends(actor)):
     with core.database() as db:
-        rows = db.execute("SELECT * FROM users WHERE enabled=1 ORDER BY display_name COLLATE NOCASE").fetchall()
+        rows = db.execute("SELECT * FROM users " + ("" if row["role"] == "admin" else "WHERE enabled=1 ") + "ORDER BY display_name COLLATE NOCASE").fetchall()
     return [core.public_user(item) for item in rows]
 
 @app.post("/api/users", status_code=201)

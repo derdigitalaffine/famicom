@@ -5,7 +5,7 @@ from app.main import app
 
 @pytest.fixture
 def client(sandbox):
-    with TestClient(app) as client:
+    with TestClient(app, base_url="https://testserver") as client:
         yield client
 
 def login(client, name, password):
