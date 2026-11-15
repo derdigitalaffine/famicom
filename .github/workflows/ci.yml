@@ -36,3 +36,25 @@ jobs:
       - uses: actions/checkout@v4
       - name: Test ncurses fallback and generated configuration
         run: ./scripts/check-bootstrap.sh
+  integration:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Bootstrap real Docker stack with local TLS
+        run: |
+          printf '\n\n\n\n\n\nIntegrationStrongPassword12345\n' | TERM=dumb ./scripts/bootstrap.sh
+      - name: Verify live API and service startup
+        run: |
+          docker compose ps
+          curl --fail --silent --show-error --retry 10 --retry-delay 3 --retry-all-errors -k --resolve chat.family.example.net:443:127.0.0.1 https://chat.family.example.net/api/config
+          docker compose exec -T api python -c "import urllib.request;print(urllib.request.urlopen('http://127.0.0.1:8000/healthz').read().decode())"
+          docker compose exec -T xmpp prosodyctl check config
+          docker compose exec -T freeswitch fs_cli -x status
+      - name: Logs for failed startup
+        if: failure()
+        run: docker compose logs --no-color --tail 80 || true
+      - name: Cleanup
+        if: always()
+        run: docker compose down -v --remove-orphans || true
