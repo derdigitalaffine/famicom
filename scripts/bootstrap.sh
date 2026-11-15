@@ -239,7 +239,7 @@ cat > deploy/generated/freeswitch/sip_profiles/internal.xml <<EOF
     <param name="sip-port" value="5060"/>
     <param name="ws-binding" value=":5066"/>
     <param name="dialplan" value="XML"/>
-    <param name="context" value="default"/>
+    <param name="context" value="public"/>
     <param name="auth-calls" value="true"/>
     <param name="inbound-reg-force-matching-username" value="true"/>
     <param name="aggressive-nat-detection" value="true"/>

@@ -44,3 +44,33 @@ def test_last_admin_protection(client):
     csrf = login(client, "owner", "owner-long-secret-value")
     result = client.patch(f"/api/users/{owner['id']}", headers={"x-csrf-token": csrf}, json={"enabled":False})
     assert result.status_code == 409
+
+def test_disabled_user_hidden_and_no_external_trunk_for_children(client, sandbox):
+    from app import provision
+    admin = core.create_user("owner", "Owner", "admin", "owner-long-secret-value", "200")
+    child = core.create_user("child2", "Child", "child", "child-long-secret-value", "202")
+    csrf = login(client, "owner", "owner-long-secret-value")
+    provision.render_users()
+    xml = (sandbox / "provision/directory/default/users.xml").read_text()
+    assert 'name="famicom_outbound_allowed" value="false"' in xml
+    assert 'name="famicom_outbound_allowed" value="true"' in xml
+    assert '<user id="202">' in xml
+    disabled = client.patch(f"/api/users/{child['id']}", json={"enabled":False}, headers={"x-csrf-token":csrf})
+    assert disabled.status_code == 200
+    assert not any(u["username"]=="child2" and u["enabled"] for u in client.get("/api/users").json())
+    restored = client.patch(f"/api/users/{child['id']}", json={"enabled":True}, headers={"x-csrf-token":csrf})
+    assert restored.status_code == 200
+    assert any(u["username"]=="child2" and u["enabled"] for u in client.get("/api/users").json())
+
+def test_upstream_fail_closed(client, sandbox):
+    from app import provision
+    user = core.create_user("parent", "Parent", "admin", "long-parent-password", "200")
+    csrf = login(client, "parent", "long-parent-password")
+    result = client.put("/api/admin/trunk", json={
+        "enabled":True, "host":"sip.example.net", "username":"customer",
+        "password":"strong-upstream-password", "allowed_prefixes":[]
+    }, headers={"x-csrf-token":csrf})
+    assert result.status_code == 422
+    provision.render_trunk()
+    assert "<include/>" in (sandbox / "provision/dialplan/default/30-outbound.xml").read_text()
+    assert "<include/>" in (sandbox / "provision/sip_profiles/external/famicom.xml").read_text()

@@ -43,7 +43,7 @@ In der PWA unter **Anrufe** das SIP-Kennwort auf eigenen Wunsch abrufen und in L
 ### Sicherheit und externe Anschlüsse
 
 - Keine Demo-Nebenstellen/Standardpasswörter bereitstellen; FreeSWITCH ESL 8021 **nicht veröffentlichen**.
-- SIP-Trunks bleiben deaktiviert, bis ein Administrator Provider und Rufnummernpräfixe explizit konfiguriert. Freigabe-/Billing-Tests sind vor Verwendung nötig.
+- SIP-Trunks bleiben deaktiviert, bis ein Administrator Provider und Rufnummernpräfixe explizit konfiguriert. Kinderkonten können selbst bei aktiviertem Trunk keine abgehenden Provideranrufe vermitteln. Freigabe-/Billing-Tests sind vor Verwendung nötig.
 - `tls internal` (Caddy) ist eine lokale Test-CA und nicht automatisch geräteweit vertrauenswürdig. Für öffentliche Dienste echtes Zertifikat/HTTPS und separate **Prosody STARTTLS**-Vertrauenskette bereitstellen.
 - Für entfernte WebRTC-Clients oft zusätzlich TURN/STUN und korrektes NAT / externes RTP erforderlich.
 - Gruppentelefonie über den internen Konferenz-Dialplan `8xxx`; serverseitige Videokonferenzen und XMPP-Jingle-zu-SIP-Gateway sind **keine** automatisch verfügbare Funktion.

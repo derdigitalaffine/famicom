@@ -13,7 +13,7 @@
 - Session cookie never supplies the XMPP/SIP credential implicitly. Browser may prompt XMPP login separately; SIP credentials are returned only to that authenticated account on explicit request.
 - XMPP HTTP auth API accessible only on Docker network, additionally Basic-authenticated; no reverse proxy route to internal auth.
 - FreeSWITCH event socket remains on private Docker network with a randomly generated password, never published.
-- Paid outbound calls **off by default**; no SIP trunk credentials in Git and no unrestricted `0` route until an admin configures strict numeric prefix allow-lists.
+- Paid outbound calls **off by default**; child extensions are explicitly denied outbound bridge via server-side FreeSWITCH dialplan, adult/admin only; no SIP trunk credentials in Git and no unrestricted `0` route until an admin configures strict numeric prefix allow-lists.
 - Test/self-signed TLS is NOT Internet-ready. ACME publicly trusted certificates, SIP/RTP firewall and NAT checks are deployment gates.
 - A single database does not imply XMPP chat history/OMEMO key consistency: Prosody data volume and user device keys need coordinated backups.
 - No emergency-calling guarantee; do not advertise this as an emergency phone replacement.

@@ -34,6 +34,7 @@ def render_users() -> None:
             f'<variable name="effective_caller_id_name" value="{name}"/>'
             f'<variable name="effective_caller_id_number" value="{uid}"/>'
             f'<variable name="outbound_caller_id_number" value="{uid}"/>'
+            f'<variable name="famicom_outbound_allowed" value="{"true" if row["role"] != "child" else "false"}"/>'
             f'</variables></user>'
         )
     atomic_write(PROVISION_DIR / "directory/default/users.xml", "<include>\n" + "\n".join(users) + "\n</include>\n")
@@ -62,7 +63,7 @@ def render_trunk() -> None:
                '<param name="register" value="true"/></gateway></include>\n')
     # Prefixes are literal numeric strings, not user-controlled regex.
     pattern = "|".join(re.escape(p) for p in prefix)
-    outgoing = ("""<include><extension name="approved-outbound"><condition field="destination_number" expression="^0((?:%s)[0-9]{3,14})$"><action application="set" data="hangup_after_bridge=true"/><action application="bridge" data="sofia/gateway/famicom/$1"/></condition></extension></include>\n""" % pattern)
+    outgoing = ("""<include><extension name="approved-outbound"><condition field="${famicom_outbound_allowed}" expression="^true$"/><condition field="destination_number" expression="^0((?:%s)[0-9]{3,14})$"><action application="set" data="hangup_after_bridge=true"/><action application="bridge" data="sofia/gateway/famicom/$1"/></condition></extension></include>\n""" % pattern)
     atomic_write(PROVISION_DIR / "sip_profiles/external/famicom.xml", gateway)
     atomic_write(PROVISION_DIR / "dialplan/default/30-outbound.xml", outgoing)
 
@@ -79,7 +80,11 @@ def reload_xml() -> bool:
             if b"+OK accepted" not in conn.recv(4096):
                 return False
             conn.sendall(b"api reloadxml\n\n")
-            return b"+OK" in conn.recv(4096)
+            success = b"+OK" in conn.recv(4096)
+            if success:
+                conn.sendall(b"api sofia profile external rescan\n\n")
+                conn.recv(4096)
+            return success
     except (OSError, TimeoutError):
         return False
 
