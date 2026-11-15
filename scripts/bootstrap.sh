@@ -282,6 +282,21 @@ docker compose config --quiet
 docker compose up -d --build
 printf '%s\n' "$admin_pw" | docker compose exec -T api python -m app.cli init-admin "$admin" "$admin_name"
 unset admin_pw xmpp_auth esl
+# FreeSWITCH can need several seconds after compose reports "started". Confirm
+# that the initial directory was actually loaded, not just written to disk.
+reload_ready=0
+for attempt in {1..30}; do
+  if docker compose exec -T api python -c 'from app.provision import reload_xml; assert reload_xml()' >/dev/null 2>&1; then
+    reload_ready=1
+    break
+  fi
+  sleep 2
+done
+if [[ "$reload_ready" -ne 1 ]]; then
+  echo "FEHLER: FreeSWITCH-ESL wurde nicht bereit oder die XML-Konfiguration konnte nicht geladen werden." >&2
+  echo "Bitte ./scripts/doctor.sh und docker compose logs freeswitch prüfen." >&2
+  exit 1
+fi
 echo "Setup angelegt: https://$web_domain"
 echo "Status: docker compose ps"
 echo "Logs: docker compose logs -f --tail=100"

@@ -29,3 +29,6 @@ Docker Compose mounts host files as read-only secrets; file-backed mounts do not
 
 ## FreeSWITCH Event Socket and includes
 Generated FreeSWITCH `X-PRE-PROCESS cmd="include"` directives resolve **relative to their containing XML file**; the bootstrap emits `default/*.xml` and `external/*.xml` (not doubled prefix paths). ESL is reachable only on the internal Docker network and uses a random password. The `localnet.auto` ACL permits the API's internal subnet to trigger config reloads; the event socket is never published on host ports. Operators running `fs_cli` must supply the generated ESL password (not the unsafe default).
+
+## Asynchronous PBX readiness
+Docker Compose reporting `started` does not imply that FreeSWITCH has loaded the Event Socket. Bootstrap now retries the private API-to-ESL handshake and initial directory reload; it fails visibly after bounded retries rather than silently leaving registered family accounts out of the PBX. The GitHub integration workflow checks authenticated `fs_cli` and API-driven `reloadxml` as separate paths.
