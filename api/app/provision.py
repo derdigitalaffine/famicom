@@ -87,8 +87,8 @@ def configuration_xml() -> dict[str, str]:
         user_nodes.remove(item)
     ET.SubElement(user_nodes, "X-PRE-PROCESS", {"cmd": "include", "data": "default/*.xml"})
     return {
-        "directory/default.xml": ET.tostring(directory, encoding="unicode") + "\\n",
-        "directory/default/users.xml": ET.tostring(users_file, encoding="unicode") + "\\n",
+        "directory/default.xml": ET.tostring(directory, encoding="unicode") + "\n",
+        "directory/default/users.xml": ET.tostring(users_file, encoding="unicode") + "\n",
         "dialplan/default.xml": render_dialplan(
             DOMAIN, groups=call_groups, conference_numbers=tuple(item["extension"] for item in rooms), trunk=trunk
         ),
