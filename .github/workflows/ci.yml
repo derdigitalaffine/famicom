@@ -1,0 +1,69 @@
+name: ci
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r api/requirements.txt -r api/requirements-dev.txt
+      - run: python -m pytest -q api/tests
+      - run: python -m compileall -q api/app
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: cd web && npm install --no-audit --no-fund && npm run build
+  config:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash -n scripts/bootstrap.sh
+      - run: cp .env.example .env && mkdir -p .secrets deploy/generated/prosody deploy/generated/freeswitch/directory deploy/generated/freeswitch/dialplan deploy/generated/freeswitch/sip_profiles && touch .secrets/xmpp_http .secrets/esl .secrets/db_key .secrets/xmpp_tls_key .secrets/xmpp_tls_cert deploy/generated/Caddyfile deploy/generated/freeswitch/event_socket.conf.xml deploy/generated/freeswitch/switch.conf.xml deploy/generated/freeswitch/vars.xml
+      - run: docker compose config --quiet
+  bootstrap:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test ncurses fallback and generated configuration
+        run: ./scripts/check-bootstrap.sh
+  integration:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Bootstrap real Docker stack with local TLS
+        run: |
+          printf '\n\n\n\n\n\nIntegrationStrongPassword12345\n' | TERM=dumb ./scripts/bootstrap.sh
+      - name: Verify live API and service startup
+        run: |
+          docker compose ps
+          curl --fail --silent --show-error --retry 10 --retry-delay 3 --retry-all-errors -k --resolve chat.family.example.net:443:127.0.0.1 https://chat.family.example.net/api/config
+          docker compose exec -T api python -c "import urllib.request;print(urllib.request.urlopen('http://127.0.0.1:8000/healthz').read().decode())"
+          docker compose exec -T xmpp prosodyctl check config
+          for attempt in $(seq 1 30); do
+            if docker compose exec -T freeswitch fs_cli -H freeswitch -p "$(cat .secrets/esl)" -x status; then
+              break
+            fi
+            sleep 2
+          done
+          docker compose exec -T freeswitch fs_cli -H freeswitch -p "$(cat .secrets/esl)" -x 'sofia status'
+          docker compose exec -T api python -c "from app.provision import reload_xml; assert reload_xml()"
+          FAMICOM_TEST_PASSWORD=IntegrationStrongPassword12345 python3 scripts/smoke-xmpp.py family.example.net admin
+          docker compose exec -T api env FAMICOM_TEST_SIP=1 python -m app.smoke_sip
+      - name: Logs for failed startup
+        if: failure()
+        run: docker compose logs --no-color --tail 80 || true
+      - name: Cleanup
+        if: always()
+        run: docker compose down -v --remove-orphans || true
