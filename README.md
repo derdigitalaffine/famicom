@@ -66,3 +66,7 @@ Siehe [AGENTS.md](AGENTS.md), [Architektur](docs/architecture.md) und [Roadmap](
 
 ### Live-Integration
 CI baut und startet alle Compose-Dienste auf einem echten GitHub-Actions-Linux-Runner. Der Live-Test prüft HTTPS-/API-Erreichbarkeit, Prosody-Konfiguration, authentifizierte FreeSWITCH-Diagnose samt `reloadxml`, außerdem XMPP-STARTTLS mit einem echten SASL-Login und einem bewusst falschen Passwort sowie SIP-REGISTER inklusive Challenge/Digest mit einer tatsächlich provisionierten Nebenstelle. Dieser Test nutzt nur ein kurzlebiges, selbstsigniertes Testzertifikat; er ersetzt **keine** Sicherheits-/Interop-Zertifizierung.
+
+### Bestehende Installation aktualisieren
+
+Bei Upgrade von der ersten Foundation auf die härtere Telefonanlage **nicht** erneut initialisieren. Stattdessen `./scripts/upgrade.sh` ausführen. Es sichert Daten und Konfiguration, aktualisiert Sofia-Profile, startet die Container neu und prüft die Provisionierung. Alte dreistellige Nummern werden migriert; alle SIP-Clients müssen ihre neue vierstellige Nummer verwenden. Siehe [PBX-Migrationsanleitung](docs/migration-001-pbx.md).
