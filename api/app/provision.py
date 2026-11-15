@@ -1,94 +1,144 @@
-"""Fail-closed FreeSWITCH XML generation. No Docker socket is ever mounted."""
+"""Canonical FreeSWITCH XML publisher.
+
+FreeSWITCH consumes the *same* fail-closed telephony.render contract tested
+in the independent routing library. Database and caller secret never enter logs.
+"""
 from __future__ import annotations
 
+import json
+import logging
 import os
-import re
 import socket
+import threading
 from pathlib import Path
-from xml.sax.saxutils import escape
+
+from telephony.render import (
+    CallGroup, IncomingRoute, SipTrunk, SipUser,
+    render_directory, render_dialplan, render_gateway, render_public_dialplan,
+    sip_ha1,
+)
 
 from .core import DOMAIN, PROVISION_DIR, database, decrypt, secret_file
 
-def xml(value: str) -> str:
-    return escape(str(value), {'"': '&quot;', "'": '&apos;'})
+LOG = logging.getLogger(__name__)
+_LOCK = threading.RLock()
 
-def atomic_write(path: Path, value: str) -> None:
+
+def atomic_write(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    temp = path.with_suffix(path.suffix + ".tmp")
-    temp.write_text(value, encoding="utf-8")
-    os.chmod(temp, 0o640)
-    os.replace(temp, path)
+    temporary = path.with_name(path.name + ".tmp")
+    try:
+        temporary.write_text(text, encoding="utf-8")
+        os.chmod(temporary, 0o640)
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def _trunk(config: dict) -> SipTrunk | None:
+    if not config.get("enabled"):
+        return None
+    try:
+        return SipTrunk(
+            name="famicom", proxy=config.get("host", ""),
+            username=config.get("username", ""),
+            password=decrypt(config.get("password_cipher", "")),
+            enabled=True, allowed_prefixes=tuple(config.get("allowed_prefixes", [])),
+        )
+    except (ValueError, KeyError, TypeError):
+        LOG.warning("Rejecting invalid stored SIP trunk configuration")
+        return None
+
+
+def configuration_xml() -> dict[str, str]:
+    """Generate a complete, consistent snapshot before replacing any config."""
+    with database() as conn:
+        rows = conn.execute("SELECT * FROM users ORDER BY id").fetchall()
+        groups = conn.execute("SELECT extension,name,members_json FROM call_groups ORDER BY extension").fetchall()
+        rooms = conn.execute("SELECT extension FROM conference_rooms ORDER BY extension").fetchall()
+        saved = conn.execute("SELECT value FROM settings WHERE key='trunk'").fetchone()
+    users = [
+        SipUser(username=row["username"], extension=row["extension"],
+                ha1=sip_ha1(row["extension"], DOMAIN, decrypt(row["sip_secret_cipher"])),
+                role=row["role"], enabled=bool(row["enabled"]),
+                outbound_allowed=bool(row["outbound_allowed"]))
+        for row in rows
+    ]
+    enabled_extensions = {user.extension for user in users if user.enabled}
+    call_groups = []
+    for item in groups:
+        members = tuple(ext for ext in json.loads(item["members_json"]) if ext in enabled_extensions)
+        if members:
+            call_groups.append(CallGroup(extension=item["extension"], members=members))
+    trunk_config = json.loads(saved["value"]) if saved else {}
+    trunk = _trunk(trunk_config)
+    return {
+        "directory/default.xml": render_directory(DOMAIN, users),
+        "dialplan/default.xml": render_dialplan(
+            DOMAIN, groups=call_groups, conference_numbers=tuple(item["extension"] for item in rooms), trunk=trunk
+        ),
+        "dialplan/public.xml": render_public_dialplan(DOMAIN),
+        "sip_profiles/external/famicom.xml": render_gateway(trunk),
+    }
+
 
 def render_users() -> None:
-    with database() as con:
-        rows = con.execute("SELECT * FROM users WHERE enabled=1 ORDER BY extension").fetchall()
-    users = []
-    for row in rows:
-        uid = xml(row["extension"])
-        name = xml(row["display_name"])
-        password = xml(decrypt(row["sip_secret_cipher"]))
-        users.append(
-            f'<user id="{uid}"><params><param name="password" value="{password}"/>'
-            f'<param name="vm-password" value="{uid}"/></params><variables>'
-            f'<variable name="user_context" value="default"/>'
-            f'<variable name="effective_caller_id_name" value="{name}"/>'
-            f'<variable name="effective_caller_id_number" value="{uid}"/>'
-            f'<variable name="outbound_caller_id_number" value="{uid}"/>'
-            f'<variable name="famicom_outbound_allowed" value="{"true" if row["role"] != "child" else "false"}"/>'
-            f'</variables></user>'
-        )
-    atomic_write(PROVISION_DIR / "directory/default/users.xml", "<include>\n" + "\n".join(users) + "\n</include>\n")
+    """Backwards-compatible helper; always render *all* dependent contexts."""
+    publish()
+
 
 def render_trunk() -> None:
-    with database() as con:
-        row = con.execute("SELECT value FROM settings WHERE key='trunk'").fetchone()
-    import json
-    conf = json.loads(row["value"]) if row else {}
-    enabled = bool(conf.get("enabled", False))
-    prefix = [p for p in conf.get("allowed_prefixes", []) if re.fullmatch(r"[0-9]{1,8}", p)]
-    if not enabled or not prefix:
-        atomic_write(PROVISION_DIR / "sip_profiles/external/famicom.xml", "<include/>\n")
-        atomic_write(PROVISION_DIR / "dialplan/default/30-outbound.xml", "<include/>\n")
-        return
-    host = conf.get("host", "")
-    if not re.fullmatch(r"[A-Za-z0-9.-]{4,253}", host):
-        raise ValueError("Invalid SIP provider")
-    user = conf.get("username", "")
-    if not re.fullmatch(r"[A-Za-z0-9_.+@-]{1,128}", user):
-        raise ValueError("Invalid trunk username")
-    password = decrypt(conf["password_cipher"])
-    gateway = ('<include><gateway name="famicom"><param name="proxy" value="' + xml(host) + '"/>'
-               '<param name="username" value="' + xml(user) + '"/>'
-               '<param name="password" value="' + xml(password) + '"/>'
-               '<param name="register" value="true"/></gateway></include>\n')
-    # Prefixes are literal numeric strings, not user-controlled regex.
-    pattern = "|".join(re.escape(p) for p in prefix)
-    outgoing = ("""<include><extension name="approved-outbound"><condition field="${famicom_outbound_allowed}" expression="^true$"/><condition field="destination_number" expression="^0((?:%s)[0-9]{3,14})$"><action application="set" data="hangup_after_bridge=true"/><action application="bridge" data="sofia/gateway/famicom/$1"/></condition></extension></include>\n""" % pattern)
-    atomic_write(PROVISION_DIR / "sip_profiles/external/famicom.xml", gateway)
-    atomic_write(PROVISION_DIR / "dialplan/default/30-outbound.xml", outgoing)
+    """Backwards-compatible helper; does not leave directory/dialplan stale."""
+    publish()
+
+
+def publish() -> None:
+    with _LOCK:
+        files = configuration_xml()
+        for name, content in files.items():
+            atomic_write(PROVISION_DIR / name, content)
+        # Old Foundation generated a cleartext SIP secret file. It must not
+        # survive migration even though the new directory no longer includes it.
+        (PROVISION_DIR / "directory/default/users.xml").unlink(missing_ok=True)
+        for stale in ("dialplan/default/10-internal.xml", "dialplan/default/20-features.xml",
+                      "dialplan/default/30-outbound.xml"):
+            (PROVISION_DIR / stale).unlink(missing_ok=True)
+
+
+def _receive_packet(stream: socket.socket) -> bytes:
+    data = b""
+    while b"\n\n" not in data and b"\r\n\r\n" not in data and len(data) < 50000:
+        chunk = stream.recv(8192)
+        if not chunk:
+            break
+        data += chunk
+    return data
+
 
 def reload_xml() -> bool:
-    """Internal ESL only. A missed reload is retried at next service restart."""
+    """One authenticated ESL control channel; never exposed outside Compose."""
     password = secret_file("FAMICOM_ESL_PASSWORD_FILE")
     if not password:
         return False
     try:
-        with socket.create_connection(("freeswitch", 8021), timeout=2) as conn:
-            conn.settimeout(3)
-            conn.recv(4096)
+        with socket.create_connection(("freeswitch", 8021), timeout=3) as conn:
+            conn.settimeout(5)
+            _receive_packet(conn)
             conn.sendall(("auth " + password + "\n\n").encode())
-            if b"+OK accepted" not in conn.recv(4096):
+            if b"+OK accepted" not in _receive_packet(conn):
                 return False
             conn.sendall(b"api reloadxml\n\n")
-            success = b"+OK" in conn.recv(4096)
-            if success:
-                conn.sendall(b"api sofia profile external rescan\n\n")
-                conn.recv(4096)
-            return success
-    except (OSError, TimeoutError):
+            result = _receive_packet(conn)
+            if b"+OK" not in result or b"-ERR" in result:
+                return False
+            conn.sendall(b"api sofia profile external rescan\n\n")
+            _receive_packet(conn)
+            return True
+    except (OSError, TimeoutError) as exc:
+        LOG.warning("FreeSWITCH XML reload unavailable (%s)", type(exc).__name__)
         return False
 
+
 def sync() -> bool:
-    render_users()
-    render_trunk()
+    publish()
     return reload_xml()
