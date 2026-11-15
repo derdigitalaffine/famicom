@@ -61,6 +61,7 @@ jobs:
           docker compose exec -T api python -c "from app.provision import reload_xml; assert reload_xml()"
           # Confirm the *running* FreeSWITCH directory contains the canonical
           # HA1 user record; never print the returned digest secret.
+          docker compose exec -T freeswitch sh -c 'test -s /usr/local/freeswitch/etc/freeswitch/directory/default/users.xml && grep -q "user id=\\\"1200\\\"" /usr/local/freeswitch/etc/freeswitch/directory/default/users.xml'
           account_status="$(docker compose exec -T freeswitch fs_cli -H freeswitch -p "$(cat .secrets/esl)" -x 'user_exists id 1200 family.example.net')"
           echo "Runtime SIP user present: $account_status"
           test "$account_status" = 'true'

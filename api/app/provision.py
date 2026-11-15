@@ -72,8 +72,23 @@ def configuration_xml() -> dict[str, str]:
             call_groups.append(CallGroup(extension=item["extension"], members=members))
     trunk_config = json.loads(saved["value"]) if saved else {}
     trunk = _trunk(trunk_config)
+    # Keep the canonical security render as input, but publish users using
+    # FreeSWITCH's proven domain/default/*.xml include layout. The root XML
+    # preprocessor loads each user as a sibling within <users>.
+    from xml.etree import ElementTree as ET
+    directory = ET.fromstring(render_directory(DOMAIN, users))
+    domain = directory.find("domain")
+    user_nodes = domain.find("./groups/group/users")
+    if user_nodes is None:
+        raise RuntimeError("Invalid canonical SIP directory structure")
+    users_file = ET.Element("include")
+    for item in list(user_nodes):
+        users_file.append(item)
+        user_nodes.remove(item)
+    ET.SubElement(user_nodes, "X-PRE-PROCESS", {"cmd": "include", "data": "default/*.xml"})
     return {
-        "directory/default.xml": render_directory(DOMAIN, users),
+        "directory/default.xml": ET.tostring(directory, encoding="unicode") + "\\n",
+        "directory/default/users.xml": ET.tostring(users_file, encoding="unicode") + "\\n",
         "dialplan/default.xml": render_dialplan(
             DOMAIN, groups=call_groups, conference_numbers=tuple(item["extension"] for item in rooms), trunk=trunk
         ),
@@ -97,9 +112,8 @@ def publish() -> None:
         files = configuration_xml()
         for name, content in files.items():
             atomic_write(PROVISION_DIR / name, content)
-        # Old Foundation generated a cleartext SIP secret file. It must not
-        # survive migration even though the new directory no longer includes it.
-        (PROVISION_DIR / "directory/default/users.xml").unlink(missing_ok=True)
+        # The now-HA1-only users.xml is intentionally preserved. It is included
+        # by directory/default.xml and never contains an unhashed SIP secret.
         for stale in ("dialplan/default/10-internal.xml", "dialplan/default/20-features.xml",
                       "dialplan/default/30-outbound.xml"):
             (PROVISION_DIR / stale).unlink(missing_ok=True)
