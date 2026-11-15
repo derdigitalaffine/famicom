@@ -95,7 +95,7 @@ def configuration_xml() -> dict[str, str]:
         '<include>\n'
         f'  <domain name="{realm}">\n'
         '    <params>\n'
-        '      <param name="dial-string" value="{presence_id=\\\\\\${dialed_user}@\\\\\\${dialed_domain}}sofia/internal/\\\\\\${dialed_user}@\\\\\\${dialed_domain}"/>\n'
+        '      <param name="dial-string" value="{presence_id=${dialed_user}@${dialed_domain}}sofia/internal/${dialed_user}@${dialed_domain}"/>\n'
         '    </params>\n'
         '    <groups><group name="default"><users>\n'
         '      <X-PRE-PROCESS cmd="include" data="default/*.xml"/>\n'
