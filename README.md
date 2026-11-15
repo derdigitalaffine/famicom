@@ -63,3 +63,6 @@ cd web && npm install && npm run build
 Siehe [AGENTS.md](AGENTS.md), [Architektur](docs/architecture.md) und [Roadmap](docs/roadmap.md). GitHub [Issue #1](https://github.com/derdigitalaffine/famicom/issues/1) ist die Architektur-/Prioritätenquelle, mit einer Claim-Issue pro Lieferung.
 
 **Docker-Dateirechte:** Bootstrap schützt das Host-Verzeichnis `.secrets` mit Modus 0700; die einzelnen Compose-Secret-Dateien sind wegen unterschiedlicher Container-UIDs lesbar (0644), jedoch außerhalb des Verzeichnisses nicht über Host-Benutzerpfade zugänglich. Bitte diese Rechte nicht ohne Prüfung ändern; keine Secrets in öffentliche Backups oder freigegebene Verzeichnisse kopieren.
+
+### Live-Integration
+CI baut und startet alle Compose-Dienste auf einem echten GitHub-Actions-Linux-Runner. Der Live-Test prüft HTTPS-/API-Erreichbarkeit, Prosody-Konfiguration, authentifizierte FreeSWITCH-Diagnose samt `reloadxml`, außerdem XMPP-STARTTLS mit einem echten SASL-Login und einem bewusst falschen Passwort. Dieser Test nutzt nur ein kurzlebiges, selbstsigniertes Testzertifikat; er ersetzt **keine** Sicherheits-/Interop-Zertifizierung.
