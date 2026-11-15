@@ -36,7 +36,7 @@ Das Skript verwendet `whiptail` für einen ncurses-artigen Dialog (falls vorhand
 ### Konten
 
 Mit dem Bootstrap-Admin in der PWA unter **Verwaltung** neue Familienmitglieder anlegen. Jedes Konto besitzt:
-- XMPP-JID `benutzer@domain`; Passwort = Kontopasswort;
+- XMPP-JID `benutzer@domain`; Passwort = Kontopasswort; Familienkontakte lassen sich in der XMPP-Weboberfläche direkt nach Namen suchen;
 - SIP-Nebenstelle (standardmäßig ab 200) mit **separatem** hochentropischem SIP-Kennwort;
 - Rolle `admin`, `adult` oder `child`.
 

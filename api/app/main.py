@@ -129,6 +129,23 @@ def users(row=Depends(actor)):
         rows = db.execute("SELECT * FROM users " + ("" if row["role"] == "admin" else "WHERE enabled=1 ") + "ORDER BY display_name COLLATE NOCASE").fetchall()
     return [core.public_user(item) for item in rows]
 
+@app.get("/api/xmpp/search")
+def xmpp_search(q: str = "", row=Depends(actor)):
+    """Converse's XHR contact search. Only enrolled members are exposed."""
+    query = q.strip().casefold()[:64]
+    if len(query) < 2:
+        return []
+    escaped = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    with core.database() as db:
+        matches = db.execute(
+            "SELECT username, display_name FROM users WHERE enabled=1 "
+            "AND (username LIKE ? ESCAPE '\\' OR display_name LIKE ? ESCAPE '\\') "
+            "ORDER BY display_name COLLATE NOCASE LIMIT 30",
+            (f"%{escaped}%", f"%{escaped}%")
+        ).fetchall()
+    return [{"jid": f"{member['username']}@{core.DOMAIN}", "fullname": member["display_name"]}
+            for member in matches if member["username"] != row["username"]]
+
 @app.post("/api/users", status_code=201)
 def add_user(payload: NewUser, row=Depends(admin)):
     try:

@@ -74,3 +74,13 @@ def test_upstream_fail_closed(client, sandbox):
     provision.render_trunk()
     assert "<include/>" in (sandbox / "provision/dialplan/default/30-outbound.xml").read_text()
     assert "<include/>" in (sandbox / "provision/sip_profiles/external/famicom.xml").read_text()
+
+def test_contact_search_authorized_and_limited(client):
+    core.create_user("parent", "Parent", "admin", "a-strong-admin-password", "200")
+    core.create_user("child1", "Child", "child", "a-strong-child-password", "201")
+    assert client.get("/api/xmpp/search?q=chi").status_code == 401
+    login(client, "parent", "a-strong-admin-password")
+    found = client.get("/api/xmpp/search?q=chi")
+    assert found.status_code == 200
+    assert found.json() == [{"jid":"child1@family.example.org","fullname":"Child"}]
+    assert client.get("/api/xmpp/search?q=ch").json() == found.json()
