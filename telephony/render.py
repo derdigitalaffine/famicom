@@ -11,7 +11,7 @@ import re
 from xml.etree import ElementTree as ET
 
 
-DOMAIN = re.compile(r"^(?=.{1,253}$)[a-z0-9]+(?:[a-z0-9.-]*[a-z0-9])?$")
+DOMAIN = re.compile(r"^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
 NAME = re.compile(r"^[a-z][a-z0-9_-]{1,31}$")
 EXT = re.compile(r"^[12][0-9]{3}$")
 GROUP = re.compile(r"^6[0-9]{3}$")
@@ -161,6 +161,8 @@ def add_route(ctx: ET.Element, name: str, expression: str, actions, *, authentic
     if authenticated:
         ET.SubElement(ext, "condition", field=fs_var("sip_authorized"),
                       expression="^true$", **{"break": "on-false"})
+        ET.SubElement(ext, "condition", field=fs_var("sip_auth_username"),
+                      expression="^[12][0-9]{3}$", **{"break": "on-false"})
     if permission:
         ET.SubElement(ext, "condition", field=permission,
                       expression="^true$", **{"break": "on-false"})
@@ -198,7 +200,8 @@ def render_dialplan(domain: str, groups=(), conference_numbers=(), trunk: SipTru
         permission = fs_var("user_data(" + fs_var("sip_auth_username") +
                             "@" + domain + " var outbound_allowed)")
         add_route(ctx, "explicit-permitted-pstn", "^9((?:" + digits + "))$",
-                  [("bridge", "sofia/gateway/" + trunk.name + "/$1")], permission=permission)
+                  [("set", "outbound_redirect_fatal=true"),
+                   ("bridge", "sofia/gateway/" + trunk.name + "/$1")], permission=permission)
     add_route(ctx, "default-deny", r"^.*$",
               [("respond", "403 No route permitted"), ("hangup", "CALL_REJECTED")])
     return xml(root)

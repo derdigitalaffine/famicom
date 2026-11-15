@@ -81,6 +81,8 @@ class TelephonyContracts(unittest.TestCase):
                             for guard in guards))
         self.assertIn("sofia/gateway/provider/$1", document)
         self.assertIn("0049631", document)
+        self.assertIn("outbound_redirect_fatal=true", document)
+        self.assertTrue(any("sip_auth_username" in guard for guard in guards))
 
     def test_gateway_password_xml_escaped_and_disabled_empty(self):
         rendered = render_gateway(trunk())
@@ -89,7 +91,7 @@ class TelephonyContracts(unittest.TestCase):
                          "Long&ValidSecret2026")
 
     def test_identifier_validation_rejects_dialplan_metacharacters(self):
-        for domain in ("bad\"><action", "evil example.com",
+        for domain in ("bad\"><action", "evil example.com", "bad..example.org",
                        "bad." + chr(36) + "{system(foo)}"):
             with self.subTest(domain=domain):
                 with self.assertRaises(ValueError):
