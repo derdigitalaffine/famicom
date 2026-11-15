@@ -127,3 +127,4 @@ export default function PbxManagement({ csrf, members }) {
       Interne Anrufe sind von kostenpflichtiger Providertelefonie getrennt. Ohne individuell aktivierte Berechtigung und explizite Providerfreigabe sind keine externen Gespräche möglich. Notrufnummern werden von FamiCom nicht unterstützt.
     </Alert>
   </Card>;
+}
