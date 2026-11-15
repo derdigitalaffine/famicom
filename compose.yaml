@@ -1,0 +1,105 @@
+name: famicom
+
+services:
+  api:
+    build: ./api
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      FAMICOM_DB_PATH: /data/famicom.sqlite3
+      FAMICOM_PROVISION_DIR: /provision
+      FAMICOM_XMPP_AUTH_FILE: /run/secrets/xmpp_http
+      FAMICOM_ESL_PASSWORD_FILE: /run/secrets/esl
+    volumes:
+      - famicom-data:/data
+      - ./deploy/generated/freeswitch:/provision
+    secrets: [xmpp_http, esl]
+    expose: ["8000"]
+    networks: [private]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3)"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+
+  xmpp:
+    build: ./deploy/prosody
+    image: famicom-prosody:local
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      PROSODY_EXTRA_CONFIG: /etc/prosody/conf.d/*.cfg.lua
+      PROSODY_VIRTUAL_HOSTS: ${FAMICOM_DOMAIN}
+      PROSODY_ADMINS: ""
+    volumes:
+      - prosody-data:/var/lib/prosody
+      - ./deploy/generated/prosody:/etc/prosody/conf.d:ro
+    ports:
+      - "5222:5222/tcp"
+    expose: ["5280"]
+    networks: [private]
+
+  freeswitch:
+    image: ${FAMICOM_FREESWITCH_IMAGE:-yukiosaka/freeswitch:latest}
+    platform: linux/amd64
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "${FAMICOM_SIP_BIND:-127.0.0.1}:5060:5060/udp"
+      - "${FAMICOM_SIP_BIND:-127.0.0.1}:5060:5060/tcp"
+      - "${FAMICOM_SIP_BIND:-127.0.0.1}:20000-20199:20000-20199/udp"
+    volumes:
+      - ./deploy/generated/freeswitch/directory:/usr/local/freeswitch/etc/freeswitch/directory:ro
+      - ./deploy/generated/freeswitch/dialplan:/usr/local/freeswitch/etc/freeswitch/dialplan:ro
+      - ./deploy/generated/freeswitch/sip_profiles:/usr/local/freeswitch/etc/freeswitch/sip_profiles:ro
+      - ./deploy/generated/freeswitch/event_socket.conf.xml:/usr/local/freeswitch/etc/freeswitch/autoload_configs/event_socket.conf.xml:ro
+      - ./deploy/generated/freeswitch/switch.conf.xml:/usr/local/freeswitch/etc/freeswitch/autoload_configs/switch.conf.xml:ro
+      - ./deploy/generated/freeswitch/vars.xml:/usr/local/freeswitch/etc/freeswitch/vars.xml:ro
+      - freeswitch-db:/usr/local/freeswitch/var/lib/freeswitch/db
+      - freeswitch-recordings:/usr/local/freeswitch/var/lib/freeswitch/recordings
+    expose: ["5066", "8021"]
+    networks: [private]
+
+  web:
+    build: ./web
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+      xmpp:
+        condition: service_started
+      freeswitch:
+        condition: service_started
+    environment:
+      FAMICOM_DOMAIN: ${FAMICOM_DOMAIN}
+    volumes:
+      - ./deploy/generated/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    ports:
+      - "${FAMICOM_HTTP_PORT:-80}:80"
+      - "${FAMICOM_HTTPS_PORT:-443}:443"
+    networks: [private]
+
+networks:
+  private:
+    driver: bridge
+    internal: false
+
+secrets:
+  xmpp_http:
+    file: ./.secrets/xmpp_http
+  esl:
+    file: ./.secrets/esl
+
+volumes:
+  famicom-data:
+  prosody-data:
+  freeswitch-db:
+  freeswitch-recordings:
+  caddy-data:
+  caddy-config:
