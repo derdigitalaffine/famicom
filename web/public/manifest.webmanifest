@@ -1,0 +1,14 @@
+{
+  "id": "/",
+  "name": "FamiCom",
+  "short_name": "FamiCom",
+  "description": "Private Familiennachrichten und Telefonie",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0c1424",
+  "theme_color": "#121b31",
+  "icons": [
+    {"src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable"}
+  ]
+}

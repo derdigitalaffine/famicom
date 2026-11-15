@@ -1,0 +1,24 @@
+{
+  "name": "famicom-web",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "vite --host",
+    "build": "vite build",
+    "preview": "vite preview --host"
+  },
+  "dependencies": {
+    "@mantine/core": "7.17.8",
+    "@mantine/hooks": "7.17.8",
+    "@tabler/icons-react": "3.36.1",
+    "converse.js": "14.0.0",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "sip.js": "0.21.2"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "4.7.0",
+    "vite": "6.4.6"
+  }
+}
