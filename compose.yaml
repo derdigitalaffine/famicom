@@ -37,7 +37,7 @@ services:
     volumes:
       - prosody-data:/var/lib/prosody
       - ./deploy/generated/prosody:/etc/prosody/conf.d:ro
-    secrets: [xmpp_http]
+    secrets: [xmpp_http, xmpp_tls_key, xmpp_tls_cert]
     ports:
       - "5222:5222/tcp"
     expose: ["5280"]
@@ -99,6 +99,10 @@ secrets:
     file: ./.secrets/esl
   db_key:
     file: ./.secrets/db_key
+  xmpp_tls_key:
+    file: ./.secrets/xmpp_tls_key
+  xmpp_tls_cert:
+    file: ./.secrets/xmpp_tls_cert
 
 volumes:
   famicom-data:

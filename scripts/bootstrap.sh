@@ -65,6 +65,9 @@ chmod 700 .secrets deploy/generated
 printf 'famicom:%s\n' "$(openssl rand -hex 32)" > .secrets/xmpp_http
 openssl rand -hex 32 > .secrets/esl
 python3 -c 'import base64,os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())' > .secrets/db_key
+openssl req -x509 -newkey rsa:3072 -nodes -days 30 -subj "/CN=$domain" \
+  -addext "subjectAltName=DNS:$domain,DNS:conference.$domain" \
+  -keyout .secrets/xmpp_tls_key -out .secrets/xmpp_tls_cert >/dev/null 2>&1
 chmod 600 .secrets/*
 esl=$(cat .secrets/esl)
 xmpp_auth=$(cat .secrets/xmpp_http)
@@ -85,6 +88,7 @@ cat > deploy/generated/prosody/famicom.cfg.lua <<EOF
 -- Generated; do not edit by hand.
 allow_registration = false
 c2s_require_encryption = true
+ssl = { key = "/run/secrets/xmpp_tls_key"; certificate = "/run/secrets/xmpp_tls_cert" }
 s2s_require_encryption = true
 http_ports = { 5280 }
 http_interfaces = { "*" }

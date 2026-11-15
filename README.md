@@ -29,6 +29,8 @@ git switch feat/communications-foundation  # bis zum Merge
 
 Das Skript verwendet `whiptail` für einen ncurses-artigen Dialog (falls vorhanden; sonst Texteingabe), fragt Domains, TLS-Modus, Administratorkonto, SIP-Bind-IP und NAT-Adresse ab, erzeugt geheimnisgeschützte Konfiguration, startet Compose und legt den ersten Administrator an. Anschließend `docker compose ps` und `./scripts/doctor.sh` prüfen.
 
+**XMPP TLS:** Bootstrap erstellt für native XMPP-Clients zunächst ein nur 30 Tage gültiges selbstsigniertes Zertifikat (SNI `$FAMICOM_DOMAIN`). Ohne Vertrauensstellung im Client klappt die Verbindung nicht. Vor einer öffentlichen Freigabe ein regulär signiertes Zertifikat für die XMPP-Domain bereitstellen, Secrets ersetzen und den XMPP-Container neu starten. Die Caddy-Web-CA ist davon unabhängig.
+
 **Achtung:** Der initiale FreeSWITCH-Container basiert auf einem Community-Image `yukiosaka/freeswitch:latest`, nicht auf einem offiziellen SignalWire-Produktivimage. Vor einem Produktionsbetrieb Digest festschreiben, Image auditieren und gegen Freeswitch-Versionen testen. Native SIP-Clients erreichen Port 5060 nur an der gewählten Bind-Adresse; voreingestellt ist 127.0.0.1. Für Geräte außerhalb des Hosts VPN (WireGuard/Tailscale) oder eigens gehärtetes SIPS verwenden.
 
 ### Konten
