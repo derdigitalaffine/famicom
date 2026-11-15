@@ -32,3 +32,5 @@ Generated FreeSWITCH `X-PRE-PROCESS cmd="include"` directives resolve **relative
 
 ## Asynchronous PBX readiness
 Docker Compose reporting `started` does not imply that FreeSWITCH has loaded the Event Socket. Bootstrap now retries the private API-to-ESL handshake and initial directory reload; it fails visibly after bounded retries rather than silently leaving registered family accounts out of the PBX. The GitHub integration workflow checks authenticated `fs_cli` and API-driven `reloadxml` as separate paths.
+
+The `localnet.auto` ESL ACL deliberately excludes the container's loopback interface. For authenticated `fs_cli` diagnostics from within the FreeSWITCH container, target `-H freeswitch` (its Docker service IP) so the source address belongs to the permitted local Docker subnet. This preserves the private ACL rather than broadening it just to make local diagnostics work.

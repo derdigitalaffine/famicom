@@ -52,12 +52,12 @@ jobs:
           docker compose exec -T api python -c "import urllib.request;print(urllib.request.urlopen('http://127.0.0.1:8000/healthz').read().decode())"
           docker compose exec -T xmpp prosodyctl check config
           for attempt in $(seq 1 30); do
-            if docker compose exec -T freeswitch fs_cli -p "$(cat .secrets/esl)" -x status; then
+            if docker compose exec -T freeswitch fs_cli -H freeswitch -p "$(cat .secrets/esl)" -x status; then
               break
             fi
             sleep 2
           done
-          docker compose exec -T freeswitch fs_cli -p "$(cat .secrets/esl)" -x 'sofia status'
+          docker compose exec -T freeswitch fs_cli -H freeswitch -p "$(cat .secrets/esl)" -x 'sofia status'
           docker compose exec -T api python -c "from app.provision import reload_xml; assert reload_xml()"
       - name: Logs for failed startup
         if: failure()
