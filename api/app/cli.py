@@ -18,7 +18,7 @@ def main():
     password = sys.stdin.readline().rstrip("\r\n") if not sys.stdin.isatty() else getpass.getpass("Admin password: ")
     if not password:
         raise SystemExit("An admin password is required")
-    account = create_user(username, display, "admin", password, extension="200")
+    account = create_user(username, display, "admin", password, extension="1200")
     del password
     synced = sync()
     print(f"Created {account['jid']} (extension {account['extension']}); FreeSWITCH reload: {synced}")

@@ -1,0 +1,21 @@
+# Prevent private runtime secrets and user data entering any Docker build context.
+.git
+.github
+.env
+.env.*
+!.env.example
+.secrets
+runtime
+deploy/generated
+*.db
+*.sqlite*
+*.pem
+*.key
+node_modules
+web/node_modules
+web/dist
+__pycache__
+.pytest_cache
+.venv
+coverage
+*.log
