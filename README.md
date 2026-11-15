@@ -37,7 +37,7 @@ Das Skript verwendet `whiptail` für einen ncurses-artigen Dialog (falls vorhand
 
 Mit dem Bootstrap-Admin in der PWA unter **Verwaltung** neue Familienmitglieder anlegen. Jedes Konto besitzt:
 - XMPP-JID `benutzer@domain`; Passwort = Kontopasswort; Familienkontakte lassen sich in der XMPP-Weboberfläche direkt nach Namen suchen;
-- SIP-Nebenstelle (standardmäßig ab 200) mit **separatem** hochentropischem SIP-Kennwort;
+- SIP-Nebenstelle (vierstellig, standardmäßig ab 1200) mit **separatem** hochentropischem SIP-Kennwort;
 - Rolle `admin`, `adult` oder `child`.
 
 In der PWA unter **Anrufe** das SIP-Kennwort auf eigenen Wunsch abrufen und in Linphone, Groundwire, Zoiper, MicroSIP etc. verwenden. Native XMPP-Apps: Conversations, Monal, Snikket, Gajim (Standardprotokoll, konkrete Funktionalität abhängig vom Client). Der Browserchat verwendet Converse.js, welches ggf. für den Chat nochmals das XMPP-Passwort verlangt; keine dauerhafte Speicherung des Kontopassworts durch die FamiCom-API.

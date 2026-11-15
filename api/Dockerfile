@@ -6,7 +6,7 @@ COPY api/requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 COPY api/app/ ./app/
 COPY telephony/ ./telephony/
-COPY entrypoint.sh /entrypoint.sh
+COPY api/entrypoint.sh /entrypoint.sh
 RUN useradd --system --uid 10001 --home /srv famicom && chmod 755 /entrypoint.sh
 EXPOSE 8000
 ENTRYPOINT ["/entrypoint.sh"]

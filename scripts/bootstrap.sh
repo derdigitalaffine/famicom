@@ -269,7 +269,7 @@ cat > deploy/generated/freeswitch/sip_profiles/external.xml <<'EOF'
     <param name="rtp-ip" value="$${local_ip_v4}"/>
     <param name="sip-port" value="5080"/>
     <param name="dialplan" value="XML"/>
-    <param name="context" value="public"/>
+    <param name="context" value="famicom-provider-inbound"/>
     <param name="auth-calls" value="false"/>
   </settings>
 </profile>
