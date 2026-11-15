@@ -97,6 +97,9 @@ def register():
                           if line.lower().startswith(challenge_name.lower() + ":")), "")
         if not challenge:
             raise AssertionError("Missing SIP authentication challenge")
+        realm = challenge_params(challenge).get("realm")
+        if realm != DOMAIN:
+            raise AssertionError("SIP challenge realm is not canonical family domain")
         authorization = build_digest(challenge, extension, password, "REGISTER", uri)
         code, _ = send(2, authorization)
         if code != 200:
