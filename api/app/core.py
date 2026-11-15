@@ -112,6 +112,8 @@ def init_db() -> None:
         );
         CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
         """)
+        con.execute("INSERT OR IGNORE INTO conference_rooms(extension,name) VALUES (?,?)",
+                    ("3000", "Familienkonferenz"))
         # Additive migration; the first Foundation release issued 200–999 extensions.
         # Convert them deterministically into 1200–1999 without discarding identities.
         columns = {item["name"] for item in con.execute("PRAGMA table_info(users)")}
