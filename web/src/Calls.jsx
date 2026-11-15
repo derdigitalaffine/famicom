@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Alert, Badge, Box, Button, Card, CopyButton, Divider, Group, PasswordInput, SimpleGrid, Stack, Text, TextInput, ThemeIcon, Title } from '@mantine/core';
-import { IconDeviceMobile, IconPhone, IconPhoneCall, IconPhoneOff, IconPlugConnected, IconRefresh, IconShieldLock } from '@tabler/icons-react';
+import { IconDeviceMobile, IconPhone, IconPhoneCall, IconPhoneOff, IconPlugConnected, IconRefresh, IconShieldLock, IconMicrophone, IconMicrophoneOff, IconPlayerPause, IconPlayerPlay } from '@tabler/icons-react';
 import { api } from './api';
 
 export default function Calls({ user, config, dialTarget, onIncoming }) {
@@ -11,6 +11,9 @@ export default function Calls({ user, config, dialTarget, onIncoming }) {
   const [incoming, setIncoming] = useState(false);
   const [error, setError] = useState('');
   const [creds, setCreds] = useState(null);
+  const [muted, setMuted] = useState(false);
+  const [held, setHeld] = useState(false);
+  const [actionBusy, setActionBusy] = useState(false);
   useEffect(() => { if (dialTarget) setDial(dialTarget); }, [dialTarget]);
   useEffect(() => () => { const current = instance.current; instance.current = null; if (current) { current.unregister().catch(() => {}); current.disconnect().catch(() => {}); } }, []);
   async function connect() {
@@ -31,8 +34,10 @@ export default function Calls({ user, config, dialTarget, onIncoming }) {
         delegate: {
           onCallReceived: () => { setIncoming(true); setState('eingehend'); onIncoming?.();
             if ('Notification' in window && Notification.permission === 'granted') new Notification('FamiCom – eingehender Anruf', { body: 'Deine Familie ruft an.' }); },
-          onCallAnswered: () => { setIncoming(false); setState('im Gespräch'); },
-          onCallHangup: () => { setIncoming(false); setState('bereit'); },
+          onCallAnswered: () => { setIncoming(false); setMuted(false); setHeld(false); setState('im Gespräch'); },
+          onCallHold: isHeld => setHeld(Boolean(isHeld)),
+          onServerDisconnect: () => { setIncoming(false); setMuted(false); setHeld(false); setState('offline'); },
+          onCallHangup: () => { setIncoming(false); setMuted(false); setHeld(false); setState('bereit'); },
         }
       });
       instance.current = phone;
@@ -40,6 +45,32 @@ export default function Calls({ user, config, dialTarget, onIncoming }) {
       await phone.register();
       setState('bereit');
     } catch (err) { setState('offline'); setError(err.message); }
+  }
+  async function toggleMute() {
+    if (!instance.current || state !== 'im Gespräch') return;
+    setActionBusy(true); setError('');
+    try {
+      if (muted) await instance.current.unmute();
+      else await instance.current.mute();
+      setMuted(!muted);
+    } catch (err) { setError(err.message); }
+    finally { setActionBusy(false); }
+  }
+  async function toggleHold() {
+    if (!instance.current || state !== 'im Gespräch') return;
+    setActionBusy(true); setError('');
+    try {
+      if (held) await instance.current.unhold();
+      else await instance.current.hold();
+      setHeld(!held);
+    } catch (err) { setError(err.message); }
+    finally { setActionBusy(false); }
+  }
+  async function pressDigit(digit) {
+    if (state !== 'im Gespräch') { setDial(value => value + digit); return; }
+    if (held || !instance.current) return;
+    try { await instance.current.sendDTMF(digit); }
+    catch (err) { setError('DTMF konnte nicht gesendet werden: ' + err.message); }
   }
   async function call(action) {
     setError('');
@@ -53,8 +84,9 @@ export default function Calls({ user, config, dialTarget, onIncoming }) {
         await instance.current.answer();
         setIncoming(false);
       } else {
-        await instance.current.hangup();
-        setIncoming(false); setState('bereit');
+        if (action === 'decline') await instance.current.decline();
+        else await instance.current.hangup();
+        setIncoming(false); setHeld(false); setMuted(false); setState('bereit');
       }
     } catch (err) { setError(err.message); setState('bereit'); }
   }
@@ -70,17 +102,32 @@ export default function Calls({ user, config, dialTarget, onIncoming }) {
           <Title order={3}>{incoming ? 'Eingehender Anruf' : 'Telefon'}</Title>
           <TextInput size="lg" w="100%" aria-label="Rufnummer" placeholder="Nebenstelle oder Telefonnummer" value={dial} onChange={e => setDial(e.currentTarget.value)}/>
           <SimpleGrid cols={3} w="min(300px, 100%)" spacing="sm">
-            {['1','2','3','4','5','6','7','8','9','*','0','#'].map(n => <Button key={n} size="lg" variant="light" color="gray" radius="md" onClick={() => setDial(v => v + n)}>{n}</Button>)}
+            {['1','2','3','4','5','6','7','8','9','*','0','#'].map(n => <Button key={n} size="lg" variant="light" color="gray" radius="md" onClick={() => pressDigit(n)} disabled={state === 'im Gespräch' && held}>{n}</Button>)}
           </SimpleGrid>
           <Group justify="center" grow w="100%">
             {state === 'offline' ? <Button leftSection={<IconPlugConnected size={18}/>} onClick={connect}>Telefonie verbinden</Button> :
               incoming ? <>
                 <Button color="teal" leftSection={<IconPhoneCall size={18}/>} onClick={() => call('answer')}>Annehmen</Button>
-                <Button color="red" leftSection={<IconPhoneOff size={18}/>} onClick={() => call('hangup')}>Ablehnen</Button>
+                <Button color="red" leftSection={<IconPhoneOff size={18}/>} onClick={() => call('decline')}>Ablehnen</Button>
               </> : state === 'bereit' ?
                 <Button color="teal" leftSection={<IconPhoneCall size={18}/>} onClick={() => call('call')}>Anrufen</Button> :
                 <Button color="red" leftSection={<IconPhoneOff size={18}/>} onClick={() => call('hangup')}>Auflegen</Button>}
           </Group>
+          {state === 'im Gespräch' && <Group justify="center" gap="sm" w="100%">
+            <Button variant={muted ? 'filled' : 'light'} color={muted ? 'orange' : 'gray'}
+              leftSection={muted ? <IconMicrophoneOff size={18}/> : <IconMicrophone size={18}/>}
+              onClick={toggleMute} loading={actionBusy} aria-pressed={muted}>
+              {muted ? 'Mikrofon an' : 'Stummschalten'}
+            </Button>
+            <Button variant={held ? 'filled' : 'light'} color={held ? 'orange' : 'gray'}
+              leftSection={held ? <IconPlayerPlay size={18}/> : <IconPlayerPause size={18}/>}
+              onClick={toggleHold} loading={actionBusy} aria-pressed={held}>
+              {held ? 'Fortsetzen' : 'Halten'}
+            </Button>
+            <Text size="xs" c="dimmed" w="100%" ta="center">
+              {held ? 'Gespräch gehalten – DTMF pausiert' : 'Tastenfeld sendet während des Gesprächs DTMF-Signale'}
+            </Text>
+          </Group>}
           <audio ref={audio} autoPlay playsInline />
           {error && <Alert color="red" w="100%">{error}</Alert>}
         </Stack>
