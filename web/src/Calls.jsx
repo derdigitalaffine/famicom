@@ -3,7 +3,7 @@ import { Alert, Badge, Box, Button, Card, CopyButton, Divider, Group, PasswordIn
 import { IconDeviceMobile, IconPhone, IconPhoneCall, IconPhoneOff, IconPlugConnected, IconRefresh, IconShieldLock } from '@tabler/icons-react';
 import { api } from './api';
 
-export default function Calls({ user, config }) {
+export default function Calls({ user, config, dialTarget, onIncoming }) {
   const instance = useRef(null);
   const audio = useRef(null);
   const [dial, setDial] = useState('');
@@ -11,6 +11,7 @@ export default function Calls({ user, config }) {
   const [incoming, setIncoming] = useState(false);
   const [error, setError] = useState('');
   const [creds, setCreds] = useState(null);
+  useEffect(() => { if (dialTarget) setDial(dialTarget); }, [dialTarget]);
   useEffect(() => () => { const current = instance.current; instance.current = null; if (current) { current.unregister().catch(() => {}); current.disconnect().catch(() => {}); } }, []);
   async function connect() {
     setError(''); setState('verbinde');
@@ -28,7 +29,8 @@ export default function Calls({ user, config }) {
         },
         media: { remote: { audio: audio.current }, constraints: { audio: true, video: false } },
         delegate: {
-          onCallReceived: () => { setIncoming(true); setState('eingehend'); },
+          onCallReceived: () => { setIncoming(true); setState('eingehend'); onIncoming?.();
+            if ('Notification' in window && Notification.permission === 'granted') new Notification('FamiCom – eingehender Anruf', { body: 'Deine Familie ruft an.' }); },
           onCallAnswered: () => { setIncoming(false); setState('im Gespräch'); },
           onCallHangup: () => { setIncoming(false); setState('bereit'); },
         }

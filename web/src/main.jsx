@@ -69,11 +69,14 @@ function Login({ config, onLogin }) {
   </div>;
 }
 
-function Family({ user, members, onRefresh }) {
+function Family({ user, members, onCall }) {
+  const [query, setQuery] = useState('');
+  const visible = members.filter(m => m.enabled && (m.display_name + ' ' + m.username + ' ' + m.extension).toLowerCase().includes(query.toLowerCase()));
   return <div className="page-frame">
     <Group justify="space-between" mb="xl"><Box><Text className="eyebrow">Miteinander verbunden</Text><Title order={2}>Deine Familie</Title></Box><Badge variant="light" size="lg">{members.length} Mitglieder</Badge></Group>
+    <TextInput aria-label="Familienmitglieder suchen" placeholder="Name, Benutzername oder Nebenstelle suchen …" value={query} onChange={event => setQuery(event.currentTarget.value)} mb="lg" />
     <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="lg">
-      {members.filter(member => member.enabled).map(member => <Card withBorder radius="xl" p="xl" className="surface-card member-card" key={member.id}>
+      {visible.map(member => <Card withBorder radius="xl" p="xl" className="surface-card member-card" key={member.id}>
         <Group align="start" wrap="nowrap">
           <Avatar size={54} radius="xl" color={member.role === 'child' ? 'grape' : member.role === 'admin' ? 'cyan' : 'blue'}>{member.display_name[0]?.toUpperCase()}</Avatar>
           <Stack gap={2} style={{ flex: 1, minWidth: 0 }}>
@@ -82,7 +85,7 @@ function Family({ user, members, onRefresh }) {
           </Stack>
         </Group>
         <Divider my="lg"/>
-        <Group justify="space-between"><Text c="dimmed" size="xs">Telefonnebenstelle</Text><Text fw={800}>{member.extension}</Text></Group>
+        <Group justify="space-between"><Box><Text c="dimmed" size="xs">Telefonnebenstelle</Text><Text fw={800}>{member.extension}</Text></Box><Button size="xs" color="blue" variant="light" leftSection={<IconPhone size={14}/>} onClick={() => onCall(member.extension)}>Anrufen</Button></Group>
       </Card>)}
     </SimpleGrid>
   </div>;
@@ -209,6 +212,7 @@ function App() {
   const [session, setSession] = useState(null);
   const [loginPassword, setLoginPassword] = useState('');
   const [page, setPage] = useState('chat');
+  const [dialTarget, setDialTarget] = useState('');
   const [members, setMembers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -248,8 +252,8 @@ function App() {
       <div className="mobile-header"><div className="mobile-brand"><div className="brand-mark"><IconMessageCircle2 size={20}/></div><b>FamiCom</b></div><Avatar color="blue" radius="xl" size="sm">{user.display_name[0]?.toUpperCase()}</Avatar></div>
       {error && <Alert color="red" withCloseButton onClose={() => setError('')} m="md">{error}</Alert>}
       {page === 'chat' && <Chat user={user} config={config} loginPassword={loginPassword}/>}
-      <div style={{ display: page === 'calls' ? 'block' : 'none' }} aria-hidden={page !== 'calls'}><Calls user={user} config={config}/></div>
-      {page === 'family' && <Family user={user} members={members} onRefresh={refreshMembers}/>}
+      <div style={{ display: page === 'calls' ? 'block' : 'none' }} aria-hidden={page !== 'calls'}><Calls user={user} config={config} dialTarget={dialTarget} onIncoming={() => setPage('calls')}/></div>
+      {page === 'family' && <Family user={user} members={members} onCall={extension => { setDialTarget(extension); setPage('calls'); }}/>}
       {page === 'settings' && <Settings user={user} csrf={session.csrf} config={config} members={members} onRefresh={refreshMembers} onSignOut={signOut}/>}
     </main>
     <nav className="mobile-bottom-nav" aria-label="Hauptnavigation">{pages.map(p => {
