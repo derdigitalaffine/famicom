@@ -37,6 +37,7 @@ services:
     volumes:
       - prosody-data:/var/lib/prosody
       - ./deploy/generated/prosody:/etc/prosody/conf.d:ro
+    secrets: [xmpp_http]
     ports:
       - "5222:5222/tcp"
     expose: ["5280"]

@@ -92,13 +92,15 @@ http_external_url = "https://$web_domain"
 VirtualHost "$domain"
   authentication = "http"
   http_auth_url = "http://api:8000/internal/xmpp"
-  http_auth_credentials = "$xmpp_auth"
+  http_auth_credentials = FileLine("/run/secrets/xmpp_http")
   modules_enabled = { "roster", "saslauth", "tls", "disco", "carbons", "smacks",
     "mam", "ping", "blocklist", "pep", "vcard4", "bosh", "websocket", "limits",
     "csi_simple", "http_file_share" }
 Component "conference.$domain" "muc"
   modules_enabled = { "muc_mam" }
 EOF
+chmod 755 deploy/generated deploy/generated/prosody
+chmod 644 deploy/generated/prosody/famicom.cfg.lua
 cat > deploy/generated/Caddyfile <<EOF
 $web_domain {
   $( [[ "$mode" == internal ]] && printf 'tls internal' || : )
@@ -172,7 +174,7 @@ cat > deploy/generated/freeswitch/directory/default.xml <<EOF
 <include>
   <domain name="$domain">
     <params>
-      <param name="dial-string" value="{presence_id=\$\{dialed_user\}@\$\{dialed_domain\}}sofia/internal/\$\{dialed_user\}@\$\{dialed_domain\}"/>
+      <param name="dial-string" value="{presence_id=\${dialed_user}@\${dialed_domain}}sofia/internal/\${dialed_user}@\${dialed_domain}"/>
     </params>
     <groups>
       <group name="default"><users>
@@ -230,8 +232,8 @@ cat > deploy/generated/freeswitch/sip_profiles/internal.xml <<EOF
   <gateways/>
   <domains><domain name="all" alias="true" parse="true"/></domains>
   <settings>
-    <param name="sip-ip" value="\$\$\{local_ip_v4\}"/>
-    <param name="rtp-ip" value="\$\$\{local_ip_v4\}"/>
+    <param name="sip-ip" value="\$\${local_ip_v4}"/>
+    <param name="rtp-ip" value="\$\${local_ip_v4}"/>
     <param name="ext-sip-ip" value="$public_ip"/>
     <param name="ext-rtp-ip" value="$public_ip"/>
     <param name="sip-port" value="5060"/>
