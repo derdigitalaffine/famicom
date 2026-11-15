@@ -46,3 +46,6 @@ Because the family SIP secret is stored as an `a1-hash` and cannot be recomputed
 
 ## Shared volume and process permissions
 The API publishes SIP directory XML as owner-writable/group-readable files with mode `0640`. The API entrypoint ensures every generated directory is mode `0750`; the FreeSWITCH container joins supplemental GID 10001 solely for read-only access to those files (the PBX mounts remain read-only). This avoids publishing password-equivalent HA1 digests to world-readable files.
+
+### Corrected group IDs and directory layout
+The API image now pins **both UID and GID to 10001**, rather than relying on Linux `useradd --system` to assign a distro-dependent group. The FreeSWITCH service has supplemental group 10001. The stable `directory/default.xml` FreeSWITCH root follows the working bootstrap template; canonical HA1-rendered `<user>` entries are emitted exclusively under `directory/default/users.xml`. This avoids serializer-generated preprocessor formatting differences and preserves the 0640 security mode.

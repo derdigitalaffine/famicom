@@ -86,8 +86,25 @@ def configuration_xml() -> dict[str, str]:
         users_file.append(item)
         user_nodes.remove(item)
     ET.SubElement(user_nodes, "X-PRE-PROCESS", {"cmd": "include", "data": "default/*.xml"})
+    # Preserve FreeSWITCH's established default.xml structure byte-for-byte,
+    # rather than serializing the X-PRE-PROCESS directive through ElementTree.
+    # Only the user snippets are sourced from the strict canonical renderer.
+    from xml.sax.saxutils import escape as xml_escape
+    realm = xml_escape(DOMAIN, {'"': '&quot;'})
+    directory_domain = (
+        '<include>\n'
+        f'  <domain name="{realm}">\n'
+        '    <params>\n'
+        '      <param name="dial-string" value="{presence_id=\\\\\\${dialed_user}@\\\\\\${dialed_domain}}sofia/internal/\\\\\\${dialed_user}@\\\\\\${dialed_domain}"/>\n'
+        '    </params>\n'
+        '    <groups><group name="default"><users>\n'
+        '      <X-PRE-PROCESS cmd="include" data="default/*.xml"/>\n'
+        '    </users></group></groups>\n'
+        '  </domain>\n'
+        '</include>\n'
+    )
     return {
-        "directory/default.xml": ET.tostring(directory, encoding="unicode") + "\n",
+        "directory/default.xml": directory_domain,
         "directory/default/users.xml": ET.tostring(users_file, encoding="unicode") + "\n",
         "dialplan/default.xml": render_dialplan(
             DOMAIN, groups=call_groups, conference_numbers=tuple(item["extension"] for item in rooms), trunk=trunk
