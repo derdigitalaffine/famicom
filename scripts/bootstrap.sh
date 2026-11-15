@@ -6,7 +6,7 @@ cd "$(dirname "$0")/.."
 
 dialog_input() {
   local title="$1" default="$2" result
-  if command -v whiptail >/dev/null 2>&1; then
+  if [[ -t 0 ]] && command -v whiptail >/dev/null 2>&1; then
     result=$(whiptail --title "FamiCom · Einrichtung" --inputbox "$title" 9 76 "$default" 3>&1 1>&2 2>&3) || exit 1
     printf '%s' "$result"
   else
@@ -16,7 +16,7 @@ dialog_input() {
 }
 dialog_password() {
   local prompt="$1" result
-  if command -v whiptail >/dev/null 2>&1; then
+  if [[ -t 0 ]] && command -v whiptail >/dev/null 2>&1; then
     result=$(whiptail --title "FamiCom · Geheimnis" --passwordbox "$prompt" 9 76 3>&1 1>&2 2>&3) || exit 1
   else
     read -r -s -p "$prompt: " result; echo >&2
@@ -24,7 +24,7 @@ dialog_password() {
   printf '%s' "$result"
 }
 dialog_mode() {
-  if command -v whiptail >/dev/null 2>&1; then
+  if [[ -t 0 ]] && command -v whiptail >/dev/null 2>&1; then
     whiptail --title "FamiCom · HTTPS" --menu "Welche TLS-Variante verwendest du?" 15 78 3 \
       internal "Caddy-interne CA für lokale Tests / VPN" \
       public "Let's Encrypt: öffentliche Domain, DNS und Port 80/443" 3>&1 1>&2 2>&3
