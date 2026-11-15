@@ -250,6 +250,7 @@ cat > deploy/generated/freeswitch/sip_profiles/internal.xml <<EOF
     <param name="dialplan" value="XML"/>
     <param name="context" value="public"/>
     <param name="auth-calls" value="true"/>
+    <param name="log-auth-failures" value="true"/>
     <param name="sip-domain" value="$domain"/>
     <param name="challenge-realm" value="$domain"/>
     <param name="force-register-domain" value="$domain"/>

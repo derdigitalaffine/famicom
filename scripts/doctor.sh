@@ -12,5 +12,7 @@ docker compose exec -T freeswitch fs_cli -H freeswitch -p "$(cat .secrets/esl)" 
 docker compose exec -T freeswitch fs_cli -H freeswitch -p "$(cat .secrets/esl)" -x 'sofia status' || echo "WARN: FreeSWITCH SIP-Profile prüfen"
 echo "=== XMPP ==="
 docker compose exec -T xmpp prosodyctl check config || true
+echo "=== Fehlgeschlagene SIP-Anmeldungen (letzte 10 Minuten) ==="
+docker compose logs --no-color --since 10m freeswitch 2>/dev/null | grep -Ei 'auth failure|can.t find user|rejected' | tail -20 || true
 echo "=== Warnungen ==="
 echo "SIP/VoIP-RTP und externe XMPP-TLS-Trust-Kette sind unabhängig vom HTTPS-Proxy zu prüfen."
