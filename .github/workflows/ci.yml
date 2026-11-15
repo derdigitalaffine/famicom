@@ -60,6 +60,7 @@ jobs:
           docker compose exec -T freeswitch fs_cli -H freeswitch -p "$(cat .secrets/esl)" -x 'sofia status'
           docker compose exec -T api python -c "from app.provision import reload_xml; assert reload_xml()"
           FAMICOM_TEST_PASSWORD=IntegrationStrongPassword12345 python3 scripts/smoke-xmpp.py family.example.net admin
+          docker compose exec -T api env FAMICOM_TEST_SIP=1 python -m app.smoke_sip
       - name: Logs for failed startup
         if: failure()
         run: docker compose logs --no-color --tail 80 || true
