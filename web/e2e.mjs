@@ -20,7 +20,7 @@ async function visit(label, viewport) {
     const response = await page.goto(host, {waitUntil: 'domcontentloaded'});
     assert(response && response.status() < 400, 'Could not load PWA');
     await page.getByRole('textbox', {name: 'Benutzername'}).fill('admin');
-    await page.getByLabel('Passwort', {exact: true}).fill('IntegrationStrongPassword12345');
+    await page.getByPlaceholder('Dein Passwort').fill('IntegrationStrongPassword12345');
     await page.getByRole('button', {name: 'Anmelden'}).click();
     await page.getByRole('button', {name: 'Familie'}).click();
     await page.getByRole('heading', {name: 'Deine Familie'}).waitFor();
