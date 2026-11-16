@@ -2,6 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Alert, Badge, Box, Button, Card, CopyButton, Divider, Group, PasswordInput, SimpleGrid, Stack, Text, TextInput, ThemeIcon, Title } from '@mantine/core';
 import { IconDeviceMobile, IconPhone, IconPhoneCall, IconPhoneOff, IconPlugConnected, IconRefresh, IconShieldLock } from '@tabler/icons-react';
 import { api } from './api';
+import IceDiagnostics from './IceDiagnostics';
+import { sipIceOptions } from './ice';
 
 export default function Calls({ user, config, dialTarget, onIncoming }) {
   const instance = useRef(null);
@@ -11,6 +13,7 @@ export default function Calls({ user, config, dialTarget, onIncoming }) {
   const [incoming, setIncoming] = useState(false);
   const [error, setError] = useState('');
   const [creds, setCreds] = useState(null);
+  const iceExpiry = useRef(null);
   const [directory, setDirectory] = useState({ groups: [], conferences: [] });
   useEffect(() => {
     api('/api/telephony/directory').then(setDirectory).catch(err => setError(err.message));
@@ -21,7 +24,11 @@ export default function Calls({ user, config, dialTarget, onIncoming }) {
     setError(''); setState('verbinde');
     try {
       const c = await api('/api/telephony/credentials');
+      // Request private no-store TURN credentials just before creating SIP.js.
+      // Passing [] also prevents SIP.js from silently adding third-party STUN.
+      const ice = await api('/api/telephony/ice');
       setCreds(c);
+      iceExpiry.current = ice.expires_at;
       const { Web } = await import('sip.js');
       const server = location.origin.replace(/^http/, 'ws') + c.sip_websocket;
       const phone = new Web.SimpleUser(server, {
@@ -29,7 +36,8 @@ export default function Calls({ user, config, dialTarget, onIncoming }) {
         userAgentOptions: {
           authorizationUsername: c.extension,
           authorizationPassword: c.sip_password,
-          displayName: user.display_name
+          displayName: user.display_name,
+          sessionDescriptionHandlerFactoryOptions: sipIceOptions(ice)
         },
         media: { remote: { audio: audio.current }, constraints: { audio: true, video: false } },
         delegate: {
@@ -43,7 +51,14 @@ export default function Calls({ user, config, dialTarget, onIncoming }) {
       await phone.connect();
       await phone.register();
       setState('bereit');
-    } catch (err) { setState('offline'); setError(err.message); }
+      return phone;
+    } catch (err) {
+      const previous = instance.current;
+      instance.current = null;
+      if (previous) { await previous.unregister().catch(() => {}); await previous.disconnect().catch(() => {}); }
+      setState('offline'); setError(err.message);
+      throw err;
+    }
   }
   async function call(action) {
     setError('');
@@ -52,6 +67,15 @@ export default function Calls({ user, config, dialTarget, onIncoming }) {
       if (action === 'call') {
         if (!/^(?:[12][0-9]{3}|3[0-9]{3}|6[0-9]{3}|90[0-9]{4,15})$/.test(dial))
           throw new Error('Wähle eine interne Nebenstelle (1xxx/2xxx), Konferenz (3xxx), Gruppe (6xxx) oder 9 + erlaubte Provider-Rufnummer.');
+        // TURN REST tokens expire after one hour; new offers must not reuse
+        // expired credentials from an idle browser tab.
+        if (iceExpiry.current && iceExpiry.current < Date.now() / 1000 + 120) {
+          const previous = instance.current;
+          instance.current = null;
+          await previous.unregister().catch(() => {});
+          await previous.disconnect().catch(() => {});
+          await connect();
+        }
         setState('wählt');
         await instance.current.call('sip:' + dial + '@' + config.domain);
       } else if (action === 'answer') {
@@ -117,6 +141,7 @@ export default function Calls({ user, config, dialTarget, onIncoming }) {
             ))}
           </Stack>
         </Card>
+        <IceDiagnostics />
         <Alert icon={<IconShieldLock size={18}/>} color="blue" variant="light" title="Sichere Erreichbarkeit">
           Für Browser-Anrufe wird HTTPS/WSS benötigt. Das native SIP-Protokoll ist standardmäßig nur lokal freigegeben. Externe Anrufe bleiben bis zur Freigabe eines SIP-Providers gesperrt.
         </Alert>
