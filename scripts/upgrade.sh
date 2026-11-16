@@ -57,7 +57,7 @@ docker compose up -d --build
 # A changed dialplan context does not take effect on sofia reloadxml alone.
 docker compose restart freeswitch
 for attempt in {1..30}; do
-  if docker compose exec -T api python -c 'from app.provision import sync; assert sync()' >/dev/null 2>&1; then
+  if docker compose exec -T --user 10001:10001 api python -c 'from app.provision import sync; assert sync()' >/dev/null 2>&1; then
     echo "FamiCom aktualisiert; Container und Nebenstellen sind neu geladen."
     echo "Hinweis: bestehende 3-stellige SIP-Nebenstellen wurden migriert. SIP-Clients auf neue 4-stellige Nummern umstellen."
     ./scripts/doctor.sh

@@ -285,13 +285,13 @@ printf '<include/>\n' > deploy/generated/freeswitch/dialplan/default/30-outbound
 echo 'Starte FamiCom (Image-Build und Netzwerkzugriff erforderlich) ...'
 docker compose config --quiet
 docker compose up -d --build
-printf '%s\n' "$admin_pw" | docker compose exec -T api python -m app.cli init-admin "$admin" "$admin_name"
+printf '%s\n' "$admin_pw" | docker compose exec -T --user 10001:10001 api python -m app.cli init-admin "$admin" "$admin_name"
 unset admin_pw xmpp_auth esl
 # FreeSWITCH can need several seconds after compose reports "started". Confirm
 # that the initial directory was actually loaded, not just written to disk.
 reload_ready=0
 for attempt in {1..30}; do
-  if docker compose exec -T api python -c 'from app.provision import reload_xml; assert reload_xml()' >/dev/null 2>&1; then
+  if docker compose exec -T --user 10001:10001 api python -c 'from app.provision import reload_xml; assert reload_xml()' >/dev/null 2>&1; then
     reload_ready=1
     break
   fi

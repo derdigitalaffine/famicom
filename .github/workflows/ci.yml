@@ -49,7 +49,7 @@ jobs:
         run: |
           docker compose ps
           curl --fail --silent --show-error --retry 10 --retry-delay 3 --retry-all-errors -k --resolve chat.family.example.net:443:127.0.0.1 https://chat.family.example.net/api/config
-          docker compose exec -T api python -c "import urllib.request;print(urllib.request.urlopen('http://127.0.0.1:8000/healthz').read().decode())"
+          docker compose exec -T --user 10001:10001 api python -c "import urllib.request;print(urllib.request.urlopen('http://127.0.0.1:8000/healthz').read().decode())"
           docker compose exec -T xmpp prosodyctl check config
           for attempt in $(seq 1 30); do
             if docker compose exec -T freeswitch fs_cli -H freeswitch -p "$(cat .secrets/esl)" -x status; then
@@ -58,13 +58,14 @@ jobs:
             sleep 2
           done
           docker compose exec -T freeswitch fs_cli -H freeswitch -p "$(cat .secrets/esl)" -x 'sofia status'
-          docker compose exec -T api python -c "from app.provision import reload_xml; assert reload_xml()"
+          docker compose exec -T --user 10001:10001 api python -c "from app.provision import reload_xml; assert reload_xml()"
           # Confirm the *running* FreeSWITCH directory contains the canonical
           # HA1 user record; never print the returned digest secret.
           docker compose exec -T freeswitch sh -c 'test -s /usr/local/freeswitch/etc/freeswitch/directory/default/users.xml && grep -q "user id=\\\"1200\\\"" /usr/local/freeswitch/etc/freeswitch/directory/default/users.xml'
           echo "FreeSWITCH XML directory diagnosis:"
           docker compose exec -T freeswitch sh -c 'id; ls -ld /usr/local/freeswitch/etc/freeswitch/directory /usr/local/freeswitch/etc/freeswitch/directory/default; ls -l /usr/local/freeswitch/etc/freeswitch/directory/default.xml /usr/local/freeswitch/etc/freeswitch/directory/default/users.xml'
           docker compose exec -T freeswitch fs_cli -H freeswitch -p "$(cat .secrets/esl)" -x 'domain_exists family.example.net'
+          docker compose exec -T --user 10001:10001 freeswitch sh -c 'test -r /usr/local/freeswitch/etc/freeswitch/directory/default/users.xml'
           account_status="$(docker compose exec -T freeswitch fs_cli -H freeswitch -p "$(cat .secrets/esl)" -x 'user_exists id 1200 family.example.net')"
           echo "Runtime SIP user present: $account_status"
           test "$account_status" = 'true'
@@ -75,7 +76,7 @@ jobs:
           fi
           unset ha1
           FAMICOM_TEST_PASSWORD=IntegrationStrongPassword12345 python3 scripts/smoke-xmpp.py family.example.net admin
-          docker compose exec -T api env FAMICOM_TEST_SIP=1 python -m app.smoke_sip
+          docker compose exec -T --user 10001:10001 api env FAMICOM_TEST_SIP=1 python -m app.smoke_sip
       - name: Logs for failed startup
         if: failure()
         run: |

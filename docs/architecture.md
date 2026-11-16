@@ -49,3 +49,6 @@ The API publishes SIP directory XML as owner-writable/group-readable files with 
 
 ### Corrected group IDs and directory layout
 The API image now pins **both UID and GID to 10001**, rather than relying on Linux `useradd --system` to assign a distro-dependent group. The FreeSWITCH service has supplemental group 10001. The stable `directory/default.xml` FreeSWITCH root follows the working bootstrap template; canonical HA1-rendered `<user>` entries are emitted exclusively under `directory/default/users.xml`. This avoids serializer-generated preprocessor formatting differences and preserves the 0640 security mode.
+
+### Bootstrap CLI privilege boundary
+Docker `compose exec` runs as the image user, **not the user to which the entrypoint later drops privileges**. Running API account initialization as container root had created root-owned, mode-0640 XML unreadable to the PBX. All provisioning CLI/smoke invocations now use `docker compose exec -T --user 10001:10001 api ...`. Integration also verifies non-root readability of the generated directory and the effective `user_exists` lookup.

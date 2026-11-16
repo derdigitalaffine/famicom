@@ -6,7 +6,7 @@ echo "=== Docker Compose ==="
 docker compose config --quiet
 docker compose ps
 echo "=== API ==="
-docker compose exec -T api python -c "import urllib.request;print(urllib.request.urlopen('http://127.0.0.1:8000/healthz',timeout=5).read().decode())"
+docker compose exec -T --user 10001:10001 api python -c "import urllib.request;print(urllib.request.urlopen('http://127.0.0.1:8000/healthz',timeout=5).read().decode())"
 echo "=== FreeSWITCH ==="
 docker compose exec -T freeswitch fs_cli -H freeswitch -p "$(cat .secrets/esl)" -x 'status' || echo "WARN: FreeSWITCH ESL nicht erreichbar"
 docker compose exec -T freeswitch fs_cli -H freeswitch -p "$(cat .secrets/esl)" -x 'sofia status' || echo "WARN: FreeSWITCH SIP-Profile prüfen"
