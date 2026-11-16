@@ -263,7 +263,7 @@ function App() {
     <main className={'main-panel ' + (page === 'chat' ? 'chat-panel' : '')}>
       <div className="mobile-header"><div className="mobile-brand"><div className="brand-mark"><IconMessageCircle2 size={20}/></div><b>FamiCom</b></div><Avatar color="blue" radius="xl" size="sm">{user.display_name[0]?.toUpperCase()}</Avatar></div>
       {error && <Alert color="red" withCloseButton onClose={() => setError('')} m="md">{error}</Alert>}
-      {page === 'chat' && <Chat user={user} config={config} loginPassword={loginPassword}/>}
+      <div style={{ display: page === 'chat' ? 'block' : 'none' }} aria-hidden={page !== 'chat'}><Chat user={user} config={config} loginPassword={loginPassword}/></div>
       <div style={{ display: page === 'calls' ? 'block' : 'none' }} aria-hidden={page !== 'calls'}><Calls user={user} config={config} dialTarget={dialTarget} onIncoming={() => setPage('calls')}/></div>
       {page === 'family' && <Family user={user} members={members} onCall={extension => { setDialTarget(extension); setPage('calls'); }}/>}
       {page === 'settings' && <Settings user={user} csrf={session.csrf} config={config} members={members} onRefresh={refreshMembers} onSignOut={signOut}/>}
