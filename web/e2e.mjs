@@ -24,7 +24,7 @@ async function visit(label, viewport) {
     await page.getByRole('button', {name: 'Anmelden'}).click();
     await page.getByRole('button', {name: 'Familie'}).click();
     await page.getByRole('heading', {name: 'Deine Familie'}).waitFor();
-    await page.getByText('Familienadmin', {exact: true}).first().waitFor();
+    await page.locator('.member-card').filter({hasText:'Familienadmin'}).getByText('Familienadmin',{exact:true}).waitFor({state:'visible'});
     await page.getByRole('button', {name: 'Verwaltung'}).click();
     await page.getByRole('heading', {name: 'Familienverwaltung'}).waitFor();
     if (label === 'mobile') {
@@ -33,14 +33,16 @@ async function visit(label, viewport) {
       await page.getByLabel('Benutzername').last().fill('e2e_user');
       await page.getByLabel('Startpasswort (mindestens 12 Zeichen)').fill('StrongE2EPassword123');
       await page.getByRole('button', {name: 'Konto hinzufügen'}).click();
-      await page.getByText('E2E Mitglied', {exact: true}).first().waitFor();
+      await page.getByRole('table').getByText('E2E Mitglied',{exact:true}).waitFor({state:'visible'});
       await page.getByRole('button', {name: 'Familie'}).click();
-      await page.getByText('E2E Mitglied', {exact: true}).waitFor();
+      await page.locator('.member-card').filter({hasText:'E2E Mitglied'}).waitFor({state:'visible'});
       const member = page.locator('.member-card').filter({hasText: 'E2E Mitglied'});
+      const extension = (await member.textContent()).match(/\\b[12][0-9]{3}\\b/);
+      assert(extension, 'New member missing a 4-digit SIP extension');
       await member.getByRole('button', {name:'Anrufen'}).click();
       await page.getByRole('heading', {name: 'Anrufe'}).waitFor();
       await page.getByRole('textbox', {name: 'Rufnummer'}).waitFor();
-      assert.equal(await page.getByRole('textbox', {name: 'Rufnummer'}).inputValue(), '201');
+      assert.equal(await page.getByRole('textbox', {name: 'Rufnummer'}).inputValue(), extension[0]);
     } else {
       await page.getByRole('button', {name: 'Anrufe'}).click();
       await page.getByRole('heading', {name: 'Anrufe'}).waitFor();

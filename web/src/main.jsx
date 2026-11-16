@@ -13,6 +13,7 @@ import {
 } from '@tabler/icons-react';
 import Chat from './Chat';
 import Calls from './Calls';
+import PbxManagement from './PbxManagement';
 import { api } from './api';
 
 const theme = createTheme({
@@ -109,6 +110,13 @@ function Admin({ csrf, user, onRefresh, members }) {
       setModal(false); setForm({ username: '', display_name: '', password: '', role: 'adult', extension: '' }); await onRefresh();
     } catch (err) { setError(err.message); } finally { setSaving(false); }
   }
+  async function setOutbound(member, outbound_allowed) {
+    setSaving(true); setError('');
+    try {
+      await api('/api/users/' + member.id, { method:'PATCH', body:JSON.stringify({ outbound_allowed }) }, csrf);
+      await onRefresh();
+    } catch (err) { setError(err.message); } finally { setSaving(false); }
+  }
   async function setEnabled(member, enabled) {
     setSaving(true); setError('');
     try {
@@ -131,17 +139,21 @@ function Admin({ csrf, user, onRefresh, members }) {
       <Group justify="space-between" mb="lg"><Title order={3}>Konten und Berechtigungen</Title><Badge variant="light">{members.length} aktiv</Badge></Group>
       <ScrollArea type="auto">
         <Table verticalSpacing="md" miw={620} highlightOnHover>
-          <Table.Thead><Table.Tr><Table.Th>Mitglied</Table.Th><Table.Th>Rolle</Table.Th><Table.Th>SIP</Table.Th><Table.Th>Aktiv</Table.Th></Table.Tr></Table.Thead>
+          <Table.Thead><Table.Tr><Table.Th>Mitglied</Table.Th><Table.Th>Rolle</Table.Th><Table.Th>SIP</Table.Th><Table.Th>Extern</Table.Th><Table.Th>Aktiv</Table.Th></Table.Tr></Table.Thead>
           <Table.Tbody>{members.map(m => <Table.Tr key={m.id}>
             <Table.Td><Text fw={700}>{m.display_name}</Text><Text size="xs" c="dimmed">{m.username}</Text></Table.Td>
             <Table.Td><Badge variant="light" color={m.role === 'admin' ? 'blue' : m.role === 'child' ? 'grape' : 'gray'}>{m.role}</Badge></Table.Td>
             <Table.Td><Text fw={700}>{m.extension}</Text></Table.Td>
+            <Table.Td><Switch checked={m.outbound_allowed} disabled={saving || m.role === 'child' || !m.enabled}
+              onChange={e => setOutbound(m, e.currentTarget.checked)}
+              aria-label={'Externe Telefonie für ' + m.display_name}/></Table.Td>
             <Table.Td><Switch disabled={saving || m.id === user.id} checked={m.enabled} onChange={e => setEnabled(m, e.currentTarget.checked)} aria-label={m.display_name + ' aktivieren'} /></Table.Td>
           </Table.Tr>)}</Table.Tbody>
         </Table>
       </ScrollArea>
       <Text size="xs" c="dimmed" mt="md">Deaktivierte Mitglieder werden sofort abgemeldet. Historische XMPP-Nachrichten und die Medienaufbewahrung folgen getrennten Löschregeln.</Text>
     </Card>
+    <PbxManagement csrf={csrf} members={members}/>
     <Card withBorder radius="xl" p="xl" className="surface-card">
       <Group gap="sm" mb="lg"><ThemeIcon variant="light"><IconPhone size={18}/></ThemeIcon><Title order={3}>SIP-Upstream</Title><Badge variant="light" color={trunk.enabled ? 'yellow' : 'gray'}>{trunk.enabled ? 'Freigabe aktiviert' : 'Gesperrt'}</Badge></Group>
       <Alert color="orange" variant="light" mb="lg" title="Kostenpflichtige Verbindungen">Externe Telefonie ist standardmäßig deaktiviert. Freigabe nur mit geprüften Providerdaten, Rufnummernpräfixen und Kostenkontrolle. Keine Notruffunktion zugesichert.</Alert>
@@ -152,7 +164,7 @@ function Admin({ csrf, user, onRefresh, members }) {
           <TextInput label="Provider-Benutzername" value={trunk.username} onChange={e => setTrunk(t => ({ ...t, username: e.currentTarget.value }))}/>
         </SimpleGrid>
         <PasswordInput label="Provider-Passwort (leer = beibehalten)" value={trunk.password} onChange={e => setTrunk(t => ({ ...t, password: e.currentTarget.value }))}/>
-        <TextInput label="Erlaubte nationale/internationale Rufnummernpräfixe" placeholder="49, 33" description="Nur Nummern mit den angegebenen Präfixen können nach Wahl der führenden 0 geroutet werden." value={trunk.allowed_prefixes} onChange={e => setTrunk(t => ({ ...t, allowed_prefixes: e.currentTarget.value }))}/>
+        <TextInput label="Ausdrücklich erlaubte Nummernpräfixe" placeholder="0049631, 0049301234" description="Nur vollständige erlaubte Präfixe (führende 0, mindestens 5 Ziffern). Wählen mit 9 + Rufnummer, z. B. 9 0049631…. Premium-Nummern werden blockiert." value={trunk.allowed_prefixes} onChange={e => setTrunk(t => ({ ...t, allowed_prefixes: e.currentTarget.value }))}/>
         <Group justify="flex-end"><Button type="submit" loading={saving} disabled={!trunkLoaded}>SIP-Konfiguration speichern</Button></Group>
       </Stack></form>
     </Card>

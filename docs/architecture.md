@@ -6,7 +6,7 @@
 - **Prosody 13**: XMPP (TCP/STARTTLS, WebSocket through Caddy, MUC, MAM, file sharing); `mod_auth_http` validates credentials against private API. No open user registration.
 - **FreeSWITCH 1.10**: native SIP, bridge, dialplan, conferences, PBX; API atomically writes XML directory and gateway files into a shared volume and requests `reloadxml` over an internal password-authenticated event socket.
 - **Caddy**: public HTTPS ingress, reverse proxies for `/api`, XMPP WebSocket, uploads and browser SIP-over-WebSocket; do not publish ESL.
-- **TURN**: future opt-in coturn (not shipped in initial foundation); mobile/remote WebRTC media requires tested NAT/TURN configuration.
+- **TURN**: optional coturn Docker Compose profile, HMAC/SHA-1 ephemeral REST credentials issued only to authenticated family members. Default host binding is loopback, no public exposure by default. NAT/remote media still require an administrator-provided external IPv4 and end-to-end testing.
 
 ## Security invariants
 - Server-side role checks; usernames constrained to ASCII alphanumeric/underscore with 3–32 characters; no case-colliding names; unique extensions.
@@ -34,3 +34,30 @@ Generated FreeSWITCH `X-PRE-PROCESS cmd="include"` directives resolve **relative
 Docker Compose reporting `started` does not imply that FreeSWITCH has loaded the Event Socket. Bootstrap now retries the private API-to-ESL handshake and initial directory reload; it fails visibly after bounded retries rather than silently leaving registered family accounts out of the PBX. The GitHub integration workflow checks authenticated `fs_cli` and API-driven `reloadxml` as separate paths.
 
 The `localnet.auto` ESL ACL deliberately excludes the container's loopback interface. For authenticated `fs_cli` diagnostics from within the FreeSWITCH container, target `-H freeswitch` (its Docker service IP) so the source address belongs to the permitted local Docker subnet. This preserves the private ACL rather than broadening it just to make local diagnostics work.
+
+## Hardened routing integration
+
+The initial cleartext directory generator is now replaced by the canonical renderer in `telephony/render.py`. FreeSWITCH receives digest `a1-hash` credentials, unique 1xxx/2xxx SIP extensions, the isolated authenticated `famicom-internal` context, isolated `famicom-provider-inbound` context, and no public route to internal dialplan. The internal profile retains the unauthenticated `public` fallback context; documented FreeSWITCH behavior overrides it with the directory `user_context` **only after a successfully authenticated user call**. Premium and broad prefixes are rejected and outbound requires an explicit adult permission and a configured trunk. The API overwrites canonical XML atomically and deletes legacy cleartext directory files.
+
+The first Foundation version issued three-digit extensions; the migration converts each such 2xx–9xx extension deterministically to 12xx–19xx (or a free 1xxx/2xxx extension on conflict). SIP clients must be updated to their new extension. Passwords are not changed. The production operator must restart FreeSWITCH and reconnect existing SIP endpoints; `reloadxml` alone does not revoke cached registrations or active channels.
+
+### Consistent SIP digest realm
+Because the family SIP secret is stored as an `a1-hash` and cannot be recomputed for a different challenge realm, the internal Sofia profile must set `challenge-realm`, `sip-domain`, `force-register-domain`, and `force-register-db-domain` to the canonical family domain. See [FreeSWITCH Sofia documentation](https://developer.signalwire.com/freeswitch/users-and-endpoints/sip-profiles/). The live SIP smoke explicitly fails if the server challenges for a different realm; arbitrary client-selected realms must never be trusted.
+
+## Shared volume and process permissions
+The API publishes SIP directory XML as owner-writable/group-readable files with mode `0640`. The API entrypoint ensures every generated directory is mode `0750`; the FreeSWITCH container joins supplemental GID 10001 solely for read-only access to those files (the PBX mounts remain read-only). This avoids publishing password-equivalent HA1 digests to world-readable files.
+
+### Corrected group IDs and directory layout
+The API image now pins **both UID and GID to 10001**, rather than relying on Linux `useradd --system` to assign a distro-dependent group. The FreeSWITCH service has supplemental group 10001. The stable `directory/default.xml` FreeSWITCH root follows the working bootstrap template; canonical HA1-rendered `<user>` entries are emitted exclusively under `directory/default/users.xml`. This avoids serializer-generated preprocessor formatting differences and preserves the 0640 security mode.
+
+### Bootstrap CLI privilege boundary
+Docker `compose exec` runs as the image user, **not the user to which the entrypoint later drops privileges**. Running API account initialization as container root had created root-owned, mode-0640 XML unreadable to the PBX. All provisioning CLI/smoke invocations now use `docker compose exec -T --user 10001:10001 api ...`. Integration also verifies non-root readability of the generated directory and the effective `user_exists` lookup.
+
+### Canonical static user directory on FreeSWITCH
+To avoid reload ambiguity with nested `X-PRE-PROCESS` includes, `provision.py` writes the complete rendered domain and its included enabled `<user>` nodes into `directory/default.xml` in one atomic replacement; legacy `directory/default/users.xml` is unlinked after publication. This is the same strict renderer verified by the standalone security contracts. Live integration asserts the active user lookup and non-root readability of that one file.
+
+### Explicit FreeSWITCH master configuration
+A live CI inspection identified that the bundled community image's effective `<section name="directory">` was empty even though the generated family domain XML existed, was readable and contained user 1200. FamiCom now binds a version-controlled `deploy/freeswitch/freeswitch.xml` master template. It explicitly loads the canonical `directory/default.xml` and the `dialplan/*.xml` tree, as well as unchanged module configuration, chatplan and English language resources, following the official FreeSWITCH vanilla configuration. The live check continues to assert that the compiled directory section contains the canonical 1200 user; **a file on disk alone does not mean FreeSWITCH has loaded the account**.
+
+### FreeSWITCH XML include compatibility proven in CI
+An isolated probe confirmed that FreeSWITCH was loading FamiCom's master XML while silently skipping the one-line API-rendered directory include. The API now uses `ET.indent` to publish multi-line, upstream-style `<include>` fragments without nested XML declarations. The probe has been removed. The live CI tests the compiled directory, verifies SHA/HA1-based SIP REGISTER for the initial admin, then provisions a second child account dynamically, checks the child cannot use the external trunk and registers that second account without a PBX restart.
