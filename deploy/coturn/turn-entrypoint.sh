@@ -42,4 +42,4 @@ if [ -n "$ip" ]; then printf 'external-ip=%s\n' "$ip" >> "$cfg"; fi
 printf 'static-auth-secret=%s\n' "$secret" >> "$cfg"
 unset secret
 chmod 0600 "$cfg"
-exec turnserver -n -c "$cfg"
+exec turnserver -c "$cfg"

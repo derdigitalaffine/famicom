@@ -40,3 +40,6 @@ assert 'tls internal' in (p/"deploy/generated/Caddyfile").read_text()
 print("Bootstrap generator: generated secret, TLS, XMPP, FreeSWITCH configs parse")
 PY
 openssl x509 -in "$tmp/project/.secrets/xmpp_tls_cert" -noout -checkend 3600 >/dev/null
+
+# Regression guard: coturn -n ignores the supplied conf file, breaking HMAC auth.
+grep -q 'exec turnserver -c "\$cfg"' "$repo_dir/deploy/coturn/turn-entrypoint.sh"

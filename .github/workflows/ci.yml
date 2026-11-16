@@ -95,6 +95,10 @@ jobs:
           # authenticated API and TURN server; CI publishes only to loopback.
           sed -i 's/^FAMICOM_TURN_ENABLED=false$/FAMICOM_TURN_ENABLED=true/' .env
           docker compose --profile turn up -d --no-deps api turn
+          # Unlike `-n`, `turnserver -c` actually loads our REST auth config.
+          # The runtime config stays inside the isolated container tmpfs.
+          docker compose --profile turn exec -T turn sh -c 'test -s /run/famicom-turn/turnserver.conf'
+          docker compose --profile turn ps turn
           curl --fail --silent --show-error --retry 15 --retry-delay 2 --retry-all-errors -k --resolve chat.family.example.net:443:127.0.0.1 https://chat.family.example.net/api/config > /dev/null
           cookiejar="$(mktemp)"
           icefile="$(mktemp)"
@@ -108,6 +112,8 @@ jobs:
         if: failure()
         run: |
           docker compose logs --no-color --tail 80 || true
+          docker compose --profile turn ps turn || true
+          docker compose --profile turn logs --no-color --tail 70 turn | sed -E 's/(static-auth-secret=)[^[:space:]]+/\\1[REDACTED]/g' || true
           docker compose logs --no-color --since 5m freeswitch | grep -Ei 'auth failure|can.t find user|rejected|forbidden|error' | tail -60 || true
       - name: Cleanup
         if: always()
