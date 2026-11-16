@@ -63,7 +63,7 @@ jobs:
           # HA1 user record; never print the returned digest secret.
           docker compose exec -T freeswitch sh -c 'test -s /usr/local/freeswitch/etc/freeswitch/directory/default.xml && grep -q "user id=\\\"1200\\\"" /usr/local/freeswitch/etc/freeswitch/directory/default.xml'
           echo "FreeSWITCH XML directory diagnosis:"
-          docker compose exec -T freeswitch sh -c 'id; ls -ld /usr/local/freeswitch/etc/freeswitch/directory /usr/local/freeswitch/etc/freeswitch/directory/default; ls -l /usr/local/freeswitch/etc/freeswitch/directory/default.xml /usr/local/freeswitch/etc/freeswitch/directory/default/users.xml'
+          docker compose exec -T freeswitch sh -c 'id; ls -ld /usr/local/freeswitch/etc/freeswitch/directory /usr/local/freeswitch/etc/freeswitch/directory/default; ls -l /usr/local/freeswitch/etc/freeswitch/directory/default.xml'
           docker compose exec -T freeswitch fs_cli -H freeswitch -p "$(cat .secrets/esl)" -x 'domain_exists family.example.net'
           docker compose exec -T --user 10001:10001 freeswitch sh -c 'test -r /usr/local/freeswitch/etc/freeswitch/directory/default.xml'
           account_status="$(docker compose exec -T freeswitch fs_cli -H freeswitch -p "$(cat .secrets/esl)" -x 'user_exists id 1200 family.example.net')"
