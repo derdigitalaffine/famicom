@@ -13,6 +13,8 @@
     <X-PRE-PROCESS cmd="include" data="chatplan/*.xml"/>
   </section>
   <section name="directory" description="Canonical Family SIP Accounts">
+    <!-- FamiCom CI sentinel: detects when the running PBX reads a different master. -->
+    <famicom-xml-probe marker="source-master"/>
     <X-PRE-PROCESS cmd="include" data="/usr/local/freeswitch/etc/freeswitch/directory/default.xml"/>
   </section>
   <section name="languages" description="Language Resources">
