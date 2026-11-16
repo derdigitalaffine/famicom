@@ -62,6 +62,10 @@ jobs:
           # Confirm the *running* FreeSWITCH directory contains the canonical
           # HA1 user record; never print the returned digest secret.
           docker compose exec -T freeswitch sh -c 'test -s /usr/local/freeswitch/etc/freeswitch/directory/default.xml && grep -q "user id=\\\"1200\\\"" /usr/local/freeswitch/etc/freeswitch/directory/default.xml'
+          echo "FreeSWITCH resolved configuration directory:"
+          docker compose exec -T freeswitch fs_cli -H freeswitch -p "$(cat .secrets/esl)" -x 'global_getvar conf_dir'
+          echo "Mounted FreeSWITCH master XML and directory include directive:"
+          docker compose exec -T freeswitch sh -c 'ls -l /usr/local/freeswitch/etc/freeswitch/freeswitch.xml; grep "directory/\\*.xml" /usr/local/freeswitch/etc/freeswitch/freeswitch.xml || true'
           echo "FreeSWITCH process identity (not only Docker exec identity):"
           docker compose exec -T freeswitch sh -c 'for f in /proc/[0-9]*/comm; do if grep -qx freeswitch "$f"; then pid=${f%/comm}; grep -E "^(Name|Uid|Gid|Groups):" "$pid/status"; fi; done' || true
           docker compose exec -T freeswitch sh -c 'id freeswitch 2>/dev/null || true'
