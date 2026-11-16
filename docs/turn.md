@@ -25,3 +25,7 @@ This coturn relay does *not* automatically alter FreeSWITCH's external signaling
 - Confirm connection to two real devices on distinct network types before claiming WAN media works.
 
 Source: [coturn upstream reference](https://github.com/coturn/coturn/blob/master/README.turnserver).
+
+## CI Live-Abnahme
+
+Der Docker-Integrationstest startet den optionalen coturn-Container nur mit dem Loopback-Binding, aktiviert TURN in der API-Testumgebung, meldet sich als Test-Familienkonto über den HTTPS-Proxy an, holt temporäre ICE-Zugangsdaten und sendet einen echten TURN Allocate über UDP inklusive 401-Challenge/Nonce und Message-Integrity. Ein erfolgreicher Relay-Allocation-Test prüft das gemeinsame Geheimnis, den coturn-Start sowie den Authentifizierungsweg. Er ersetzt keinen echten Sprachtest zweier Endgeräte und garantiert keine WAN/NAT-Funktion.
