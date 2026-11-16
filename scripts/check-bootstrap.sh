@@ -43,3 +43,6 @@ openssl x509 -in "$tmp/project/.secrets/xmpp_tls_cert" -noout -checkend 3600 >/d
 
 # Regression guard: coturn -n ignores the supplied conf file, breaking HMAC auth.
 grep -q 'exec turnserver -c "\$cfg"' "$repo_dir/deploy/coturn/turn-entrypoint.sh"
+
+# The coturn image runs as nobody (65534); its private tmpfs must be writable.
+grep -q 'uid=65534,gid=65534,mode=0700' "$repo_dir/compose.yaml"

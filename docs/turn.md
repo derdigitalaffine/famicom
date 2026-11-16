@@ -29,3 +29,6 @@ Source: [coturn upstream reference](https://github.com/coturn/coturn/blob/master
 ## CI Live-Abnahme
 
 Der Docker-Integrationstest startet den optionalen coturn-Container nur mit dem Loopback-Binding, aktiviert TURN in der API-Testumgebung, meldet sich als Test-Familienkonto über den HTTPS-Proxy an, holt temporäre ICE-Zugangsdaten und sendet einen echten TURN Allocate über UDP inklusive 401-Challenge/Nonce und Message-Integrity. Ein erfolgreicher Relay-Allocation-Test prüft das gemeinsame Geheimnis, den coturn-Start sowie den Authentifizierungsweg. Er ersetzt keinen echten Sprachtest zweier Endgeräte und garantiert keine WAN/NAT-Funktion.
+
+### Non-root tmpfs permissions
+The official coturn image runs as UID/GID 65534 (`nobody:nogroup`). The tmpfs containing the generated configuration is mounted with `uid=65534,gid=65534,mode=0700`; the configuration file itself remains mode `0600`. A root-owned 0700 mount is incompatible with this image and is caught by the live Compose TURN test.

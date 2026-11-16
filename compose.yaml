@@ -87,7 +87,7 @@ services:
       - ./deploy/coturn/turn-entrypoint.sh:/opt/famicom/turn-entrypoint.sh:ro
     secrets: [turn_rest]
     tmpfs:
-      - /run/famicom-turn:size=1m,mode=0700
+      - /run/famicom-turn:uid=65534,gid=65534,mode=0700,size=1m
     security_opt: [no-new-privileges:true]
     ports:
       - "${FAMICOM_TURN_BIND:-127.0.0.1}:3478:3478/udp"
