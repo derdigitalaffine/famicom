@@ -57,7 +57,7 @@ export default function Calls({ user, config, dialTarget, onIncoming }) {
       instance.current = null;
       if (previous) { await previous.unregister().catch(() => {}); await previous.disconnect().catch(() => {}); }
       setState('offline'); setError(err.message);
-      throw err;
+      return null;
     }
   }
   async function call(action) {
@@ -74,7 +74,7 @@ export default function Calls({ user, config, dialTarget, onIncoming }) {
           instance.current = null;
           await previous.unregister().catch(() => {});
           await previous.disconnect().catch(() => {});
-          await connect();
+          if (!await connect()) throw new Error('Die Telefonie konnte nicht neu verbunden werden.');
         }
         setState('wählt');
         await instance.current.call('sip:' + dial + '@' + config.domain);

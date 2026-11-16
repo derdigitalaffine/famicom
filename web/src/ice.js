@@ -1,4 +1,4 @@
-import { api } from './api';
+import { api } from './api.js';
 
 export async function loadIceConfiguration() {
   const result = await api('/api/telephony/ice');
