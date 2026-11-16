@@ -64,6 +64,7 @@ mkdir -p .secrets deploy/generated/prosody deploy/generated/freeswitch/{director
 chmod 700 .secrets deploy/generated
 printf 'famicom:%s\n' "$(openssl rand -hex 32)" > .secrets/xmpp_http
 openssl rand -hex 32 > .secrets/esl
+openssl rand -hex 32 > .secrets/turn_rest
 python3 -c 'import base64,os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())' > .secrets/db_key
 openssl req -x509 -newkey rsa:3072 -nodes -days 30 -subj "/CN=$domain" \
   -addext "subjectAltName=DNS:$domain,DNS:conference.$domain" \
@@ -85,6 +86,11 @@ FAMICOM_HTTP_PORT=80
 FAMICOM_TLS_MODE=$mode
 FAMICOM_SECURE_COOKIES=true
 FAMICOM_FREESWITCH_IMAGE=yukiosaka/freeswitch:latest
+FAMICOM_TURN_IMAGE=coturn/coturn:4.18.0-r0
+FAMICOM_TURN_ENABLED=false
+FAMICOM_TURN_HOST=turn.$domain
+FAMICOM_TURN_BIND=127.0.0.1
+FAMICOM_TURN_ADVERTISE_IP=
 EOF
 chmod 600 .env
 
@@ -250,6 +256,11 @@ cat > deploy/generated/freeswitch/sip_profiles/internal.xml <<EOF
     <param name="dialplan" value="XML"/>
     <param name="context" value="public"/>
     <param name="auth-calls" value="true"/>
+    <param name="log-auth-failures" value="true"/>
+    <param name="sip-domain" value="$domain"/>
+    <param name="challenge-realm" value="$domain"/>
+    <param name="force-register-domain" value="$domain"/>
+    <param name="force-register-db-domain" value="$domain"/>
     <param name="inbound-reg-force-matching-username" value="true"/>
     <param name="aggressive-nat-detection" value="true"/>
     <param name="manage-presence" value="true"/>
@@ -269,7 +280,7 @@ cat > deploy/generated/freeswitch/sip_profiles/external.xml <<'EOF'
     <param name="rtp-ip" value="$${local_ip_v4}"/>
     <param name="sip-port" value="5080"/>
     <param name="dialplan" value="XML"/>
-    <param name="context" value="public"/>
+    <param name="context" value="famicom-provider-inbound"/>
     <param name="auth-calls" value="false"/>
   </settings>
 </profile>
@@ -280,13 +291,17 @@ printf '<include/>\n' > deploy/generated/freeswitch/dialplan/default/30-outbound
 echo 'Starte FamiCom (Image-Build und Netzwerkzugriff erforderlich) ...'
 docker compose config --quiet
 docker compose up -d --build
-printf '%s\n' "$admin_pw" | docker compose exec -T api python -m app.cli init-admin "$admin" "$admin_name"
+printf '%s\n' "$admin_pw" | docker compose exec -T --user 10001:10001 api python -m app.cli init-admin "$admin" "$admin_name"
 unset admin_pw xmpp_auth esl
+# Initial account provisioning happens after the first PBX startup. Restart
+# to force the configured directory and new SIP digest credentials to be loaded
+# from the beginning, rather than relying on a startup-time empty snapshot.
+docker compose restart freeswitch
 # FreeSWITCH can need several seconds after compose reports "started". Confirm
 # that the initial directory was actually loaded, not just written to disk.
 reload_ready=0
 for attempt in {1..30}; do
-  if docker compose exec -T api python -c 'from app.provision import reload_xml; assert reload_xml()' >/dev/null 2>&1; then
+  if docker compose exec -T --user 10001:10001 api python -c 'from app.provision import reload_xml; assert reload_xml()' >/dev/null 2>&1; then
     reload_ready=1
     break
   fi

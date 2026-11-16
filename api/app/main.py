@@ -13,7 +13,8 @@ from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 
-from . import core, provision
+from . import core, provision, ice as ice_module
+from telephony.render import CallGroup, SipTrunk
 
 COOKIE = "famicom_session"
 SECURE = os.getenv("FAMICOM_SECURE_COOKIES", "true").lower() == "true"
@@ -39,6 +40,7 @@ class NewUser(BaseModel):
     extension: str | None = None
 
 class UpdateUser(BaseModel):
+    outbound_allowed: bool | None = None
     display_name: str | None = None
     role: str | None = None
     enabled: bool | None = None
@@ -47,6 +49,15 @@ class UpdateUser(BaseModel):
 class ChangePassword(BaseModel):
     current_password: str
     new_password: str
+
+class CallGroupInput(BaseModel):
+    extension: str
+    name: str = Field(min_length=1, max_length=80)
+    members: list[str] = Field(min_length=1, max_length=20)
+
+class ConferenceInput(BaseModel):
+    extension: str
+    name: str = Field(min_length=1, max_length=80)
 
 class Trunk(BaseModel):
     enabled: bool = False
@@ -94,6 +105,16 @@ def health():
 def config():
     return {"domain": core.DOMAIN, "xmpp_websocket": "/xmpp-websocket", "sip_websocket": "/sip-ws",
             "group_domain": "conference." + core.DOMAIN, "sip_domain": core.DOMAIN}
+
+@app.get("/api/telephony/ice")
+def ice_settings(response: Response, row=Depends(actor)):
+    """Same-origin, authenticated ICE config, never publicly cache credentials."""
+    response.headers["Cache-Control"] = "private, no-store, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    try:
+        return ice_module.ice_configuration(row["username"])
+    except RuntimeError as exc:
+        raise HTTPException(503, str(exc)) from exc
 
 @app.post("/api/auth/login")
 def login(payload: Login, response: Response, request: Request):
@@ -169,15 +190,20 @@ def update_user(user_id: int, payload: UpdateUser, row=Depends(admin)):
             raise HTTPException(422, "Unknown role")
         if updates.get("display_name") is not None and not 1 <= len(updates["display_name"].strip()) <= 80:
             raise HTTPException(422, "Invalid display name")
+        effective_role = updates.get("role", target["role"])
+        if updates.get("outbound_allowed") is True and effective_role == "child":
+            raise HTTPException(422, "Children cannot place provider calls")
         removing_admin = target["role"] == "admin" and (
             ("role" in updates and updates["role"] != "admin") or updates.get("enabled") is False)
         if removing_admin:
             count = db.execute("SELECT count(*) FROM users WHERE role='admin' AND enabled=1").fetchone()[0]
             if count <= 1:
                 raise HTTPException(409, "Cannot remove last admin")
-        for field in ("display_name", "role", "enabled"):
+        for field in ("display_name", "role", "enabled", "outbound_allowed"):
             if field in updates and updates[field] is not None:
                 db.execute(f"UPDATE users SET {field}=? WHERE id=?", (updates[field], user_id))
+        if effective_role == "child":
+            db.execute("UPDATE users SET outbound_allowed=0 WHERE id=?", (user_id,))
         if updates.get("password"):
             db.execute("UPDATE users SET password_hash=? WHERE id=?",
                        (core.hash_password(updates["password"]), user_id))
@@ -198,6 +224,65 @@ def change_password(payload: ChangePassword, row=Depends(actor)):
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
     return {"ok": True, "reauthentication_required": True}
+
+@app.get("/api/telephony/directory")
+def telephone_directory(row=Depends(actor)):
+    with core.database() as db:
+        groups = db.execute("SELECT extension,name,members_json FROM call_groups ORDER BY extension").fetchall()
+        conferences = db.execute("SELECT extension,name FROM conference_rooms ORDER BY extension").fetchall()
+    return {
+        "groups": [{"extension": g["extension"], "name": g["name"], "members": json.loads(g["members_json"])} for g in groups],
+        "conferences": [{"extension": c["extension"], "name": c["name"]} for c in conferences],
+    }
+
+@app.post("/api/admin/call-groups", status_code=201)
+def save_call_group(payload: CallGroupInput, row=Depends(admin)):
+    try:
+        group = CallGroup(extension=payload.extension, members=tuple(payload.members))
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    with core.database() as db:
+        allowed = {r["extension"] for r in db.execute("SELECT extension FROM users WHERE enabled=1")}
+        if not set(group.members).issubset(allowed):
+            raise HTTPException(422, "Group members must be existing enabled extensions")
+        db.execute("INSERT INTO call_groups(extension,name,members_json) VALUES (?,?,?) "
+                   "ON CONFLICT(extension) DO UPDATE SET name=excluded.name,members_json=excluded.members_json",
+                   (group.extension, payload.name.strip(), json.dumps(group.members)))
+    synced = provision.sync()
+    core.audit(row["id"], "group.saved", group.extension)
+    return {"extension": group.extension, "telephony_reload": synced}
+
+@app.delete("/api/admin/call-groups/{extension}")
+def delete_call_group(extension: str, row=Depends(admin)):
+    with core.database() as db:
+        result = db.execute("DELETE FROM call_groups WHERE extension=?", (extension,))
+        if not result.rowcount:
+            raise HTTPException(404, "Unknown group")
+    synced = provision.sync()
+    core.audit(row["id"], "group.deleted", extension)
+    return {"ok": True, "telephony_reload": synced}
+
+@app.post("/api/admin/conferences", status_code=201)
+def save_conference(payload: ConferenceInput, row=Depends(admin)):
+    if not re.fullmatch(r"3[0-9]{3}", payload.extension):
+        raise HTTPException(422, "Conference number must be 3xxx")
+    with core.database() as db:
+        db.execute("INSERT INTO conference_rooms(extension,name) VALUES(?,?) "
+                   "ON CONFLICT(extension) DO UPDATE SET name=excluded.name",
+                   (payload.extension, payload.name.strip()))
+    synced = provision.sync()
+    core.audit(row["id"], "conference.saved", payload.extension)
+    return {"extension": payload.extension, "telephony_reload": synced}
+
+@app.delete("/api/admin/conferences/{extension}")
+def delete_conference(extension: str, row=Depends(admin)):
+    with core.database() as db:
+        found = db.execute("DELETE FROM conference_rooms WHERE extension=?", (extension,))
+        if not found.rowcount:
+            raise HTTPException(404, "Unknown conference")
+    synced = provision.sync()
+    core.audit(row["id"], "conference.deleted", extension)
+    return {"ok": True, "telephony_reload": synced}
 
 @app.get("/api/telephony/credentials")
 def credentials(row=Depends(actor)):
@@ -220,8 +305,10 @@ def set_trunk(payload: Trunk, row=Depends(admin)):
         old = db.execute("SELECT value FROM settings WHERE key='trunk'").fetchone()
         saved = json.loads(old["value"]) if old else {}
         new = payload.model_dump(exclude={"password"})
-        if any(not re.fullmatch(r"[0-9]{1,8}", p) for p in payload.allowed_prefixes):
-            raise HTTPException(422, "Only numeric prefixes are allowed")
+        if len(set(payload.allowed_prefixes)) != len(payload.allowed_prefixes):
+            raise HTTPException(422, "Duplicate prefixes")
+        if any(not re.fullmatch(r"0[0-9]{4,12}", p) for p in payload.allowed_prefixes):
+            raise HTTPException(422, "Each provider prefix must be a national/international prefix (0 + 4–12 digits)")
         if payload.enabled:
             if not re.fullmatch(r"[A-Za-z0-9.-]{4,253}", payload.host):
                 raise HTTPException(422, "Invalid provider host")
@@ -231,6 +318,12 @@ def set_trunk(payload: Trunk, row=Depends(admin)):
                 raise HTTPException(422, "Explicit number allow-list required")
             if not payload.password and not saved.get("password_cipher"):
                 raise HTTPException(422, "Provider secret required")
+            try:
+                SipTrunk(name="famicom", proxy=payload.host, username=payload.username,
+                         password=payload.password or core.decrypt(saved["password_cipher"]),
+                         enabled=True, allowed_prefixes=tuple(payload.allowed_prefixes))
+            except (ValueError, KeyError) as exc:
+                raise HTTPException(422, str(exc)) from exc
         new["password_cipher"] = core.encrypt(payload.password) if payload.password else saved.get("password_cipher", "")
         db.execute("INSERT INTO settings(key,value) VALUES('trunk',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
                    (json.dumps(new),))

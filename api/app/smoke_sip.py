@@ -46,8 +46,14 @@ def build_digest(header, username, password, method, uri):
     )
 
 def register():
+    chosen = os.getenv("FAMICOM_TEST_SIP_USERNAME", "")
     with database() as db:
-        user = db.execute("SELECT extension,sip_secret_cipher FROM users WHERE enabled=1 ORDER BY id LIMIT 1").fetchone()
+        if chosen:
+            user = db.execute("SELECT extension,sip_secret_cipher FROM users "
+                              "WHERE enabled=1 AND username=? LIMIT 1", (chosen,)).fetchone()
+        else:
+            user = db.execute("SELECT extension,sip_secret_cipher FROM users "
+                              "WHERE enabled=1 ORDER BY id LIMIT 1").fetchone()
     assert user, "No provisioned SIP family member"
     extension = user["extension"]
     password = decrypt(user["sip_secret_cipher"])
@@ -97,6 +103,9 @@ def register():
                           if line.lower().startswith(challenge_name.lower() + ":")), "")
         if not challenge:
             raise AssertionError("Missing SIP authentication challenge")
+        realm = challenge_params(challenge).get("realm")
+        if realm != DOMAIN:
+            raise AssertionError("SIP challenge realm is not canonical family domain")
         authorization = build_digest(challenge, extension, password, "REGISTER", uri)
         code, _ = send(2, authorization)
         if code != 200:

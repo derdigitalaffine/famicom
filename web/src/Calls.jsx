@@ -2,6 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Alert, Badge, Box, Button, Card, CopyButton, Divider, Group, PasswordInput, SimpleGrid, Stack, Text, TextInput, ThemeIcon, Title } from '@mantine/core';
 import { IconDeviceMobile, IconPhone, IconPhoneCall, IconPhoneOff, IconPlugConnected, IconRefresh, IconShieldLock, IconMicrophone, IconMicrophoneOff, IconPlayerPause, IconPlayerPlay } from '@tabler/icons-react';
 import { api } from './api';
+import IceDiagnostics from './IceDiagnostics';
+import { sipIceOptions } from './ice';
 
 export default function Calls({ user, config, dialTarget, onIncoming }) {
   const instance = useRef(null);
@@ -14,13 +16,22 @@ export default function Calls({ user, config, dialTarget, onIncoming }) {
   const [muted, setMuted] = useState(false);
   const [held, setHeld] = useState(false);
   const [actionBusy, setActionBusy] = useState(false);
+  const iceExpiry = useRef(null);
+  const [directory, setDirectory] = useState({ groups: [], conferences: [] });
+  useEffect(() => {
+    api('/api/telephony/directory').then(setDirectory).catch(err => setError(err.message));
+  }, []);
   useEffect(() => { if (dialTarget) setDial(dialTarget); }, [dialTarget]);
   useEffect(() => () => { const current = instance.current; instance.current = null; if (current) { current.unregister().catch(() => {}); current.disconnect().catch(() => {}); } }, []);
   async function connect() {
     setError(''); setState('verbinde');
     try {
       const c = await api('/api/telephony/credentials');
+      // Request private no-store TURN credentials just before creating SIP.js.
+      // Passing [] also prevents SIP.js from silently adding third-party STUN.
+      const ice = await api('/api/telephony/ice');
       setCreds(c);
+      iceExpiry.current = ice.expires_at;
       const { Web } = await import('sip.js');
       const server = location.origin.replace(/^http/, 'ws') + c.sip_websocket;
       const phone = new Web.SimpleUser(server, {
@@ -28,7 +39,8 @@ export default function Calls({ user, config, dialTarget, onIncoming }) {
         userAgentOptions: {
           authorizationUsername: c.extension,
           authorizationPassword: c.sip_password,
-          displayName: user.display_name
+          displayName: user.display_name,
+          sessionDescriptionHandlerFactoryOptions: sipIceOptions(ice)
         },
         media: { remote: { audio: audio.current }, constraints: { audio: true, video: false } },
         delegate: {
@@ -44,10 +56,17 @@ export default function Calls({ user, config, dialTarget, onIncoming }) {
       await phone.connect();
       await phone.register();
       setState('bereit');
-    } catch (err) { setState('offline'); setError(err.message); }
+      return phone;
+    } catch (err) {
+      const previous = instance.current;
+      instance.current = null;
+      if (previous) { await previous.unregister().catch(() => {}); await previous.disconnect().catch(() => {}); }
+      setState('offline'); setError(err.message);
+      return null;
+    }
   }
   async function toggleMute() {
-    if (!instance.current || state !== 'im Gespräch') return;
+    if (!instance.current || state !== 'im Gespräch' || actionBusy) return;
     setActionBusy(true); setError('');
     try {
       if (muted) await instance.current.unmute();
@@ -57,7 +76,7 @@ export default function Calls({ user, config, dialTarget, onIncoming }) {
     finally { setActionBusy(false); }
   }
   async function toggleHold() {
-    if (!instance.current || state !== 'im Gespräch') return;
+    if (!instance.current || state !== 'im Gespräch' || actionBusy) return;
     setActionBusy(true); setError('');
     try {
       if (held) await instance.current.unhold();
@@ -77,7 +96,17 @@ export default function Calls({ user, config, dialTarget, onIncoming }) {
     try {
       if (!instance.current) throw new Error('Telefonie ist nicht verbunden');
       if (action === 'call') {
-        if (!/^(?:[2-9][0-9]{2,4}|0[0-9]{4,18})$/.test(dial)) throw new Error('Ungültige Rufnummer');
+        if (!/^(?:[12][0-9]{3}|3[0-9]{3}|6[0-9]{3}|90[0-9]{4,15})$/.test(dial))
+          throw new Error('Wähle eine interne Nebenstelle (1xxx/2xxx), Konferenz (3xxx), Gruppe (6xxx) oder 9 + erlaubte Provider-Rufnummer.');
+        // TURN REST tokens expire after one hour; new offers must not reuse
+        // expired credentials from an idle browser tab.
+        if (iceExpiry.current && iceExpiry.current < Date.now() / 1000 + 120) {
+          const previous = instance.current;
+          instance.current = null;
+          await previous.unregister().catch(() => {});
+          await previous.disconnect().catch(() => {});
+          if (!await connect()) throw new Error('Die Telefonie konnte nicht neu verbunden werden.');
+        }
         setState('wählt');
         await instance.current.call('sip:' + dial + '@' + config.domain);
       } else if (action === 'answer') {
@@ -86,7 +115,7 @@ export default function Calls({ user, config, dialTarget, onIncoming }) {
       } else {
         if (action === 'decline') await instance.current.decline();
         else await instance.current.hangup();
-        setIncoming(false); setHeld(false); setMuted(false); setState('bereit');
+        setIncoming(false); setMuted(false); setHeld(false); setState('bereit');
       }
     } catch (err) { setError(err.message); setState('bereit'); }
   }
@@ -146,6 +175,20 @@ export default function Calls({ user, config, dialTarget, onIncoming }) {
             </CopyButton>
           </>}
         </Card>
+        <Card withBorder radius="xl" className="surface-card" p="xl">
+          <Title order={4} mb="sm">Anrufgruppen und Konferenzen</Title>
+          <Text c="dimmed" size="xs" mb="md">Kurzwahl antippen, um eine interne Gruppe oder Konferenz zu erreichen.</Text>
+          <Stack gap="xs">
+            {[...directory.groups.map(g => ({ ...g, type: 'Gruppe' })),
+              ...directory.conferences.map(c => ({ ...c, type: 'Konferenz' }))].map(item => (
+              <Group key={item.extension} justify="space-between" wrap="nowrap">
+                <div><Text fw={700} size="sm">{item.name}</Text><Text c="dimmed" size="xs">{item.type} · {item.extension}</Text></div>
+                <Button size="compact-sm" variant="light" leftSection={<IconPhone size={14}/>} onClick={() => setDial(item.extension)}>Wählen</Button>
+              </Group>
+            ))}
+          </Stack>
+        </Card>
+        <IceDiagnostics />
         <Alert icon={<IconShieldLock size={18}/>} color="blue" variant="light" title="Sichere Erreichbarkeit">
           Für Browser-Anrufe wird HTTPS/WSS benötigt. Das native SIP-Protokoll ist standardmäßig nur lokal freigegeben. Externe Anrufe bleiben bis zur Freigabe eines SIP-Providers gesperrt.
         </Alert>

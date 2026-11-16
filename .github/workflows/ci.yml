@@ -22,14 +22,15 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - run: cd web && npm install --no-audit --no-fund && npm run build
+      - run: cd web && npm install --no-audit --no-fund && npm test && npm run build
   config:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - run: bash -n scripts/bootstrap.sh
-      - run: cp .env.example .env && mkdir -p .secrets deploy/generated/prosody deploy/generated/freeswitch/directory deploy/generated/freeswitch/dialplan deploy/generated/freeswitch/sip_profiles && touch .secrets/xmpp_http .secrets/esl .secrets/db_key .secrets/xmpp_tls_key .secrets/xmpp_tls_cert deploy/generated/Caddyfile deploy/generated/freeswitch/event_socket.conf.xml deploy/generated/freeswitch/switch.conf.xml deploy/generated/freeswitch/vars.xml
+      - run: cp .env.example .env && mkdir -p .secrets deploy/generated/prosody deploy/generated/freeswitch/directory deploy/generated/freeswitch/dialplan deploy/generated/freeswitch/sip_profiles && touch .secrets/xmpp_http .secrets/esl .secrets/turn_rest .secrets/db_key .secrets/xmpp_tls_key .secrets/xmpp_tls_cert deploy/generated/Caddyfile deploy/generated/freeswitch/event_socket.conf.xml deploy/generated/freeswitch/switch.conf.xml deploy/generated/freeswitch/vars.xml
       - run: docker compose config --quiet
+      - run: docker compose --profile turn config --quiet
   bootstrap:
     runs-on: ubuntu-latest
     steps:
@@ -37,7 +38,9 @@ jobs:
       - name: Test ncurses fallback and generated configuration
         run: ./scripts/check-bootstrap.sh
   integration:
-    if: github.event_name == 'pull_request'
+    # Run live integration on the active runtime branch even if the PR
+    # synchronize webhook is delayed; keep the expensive job out of main pushes.
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/feat/telephony-runtime-routing')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -49,7 +52,7 @@ jobs:
         run: |
           docker compose ps
           curl --fail --silent --show-error --retry 10 --retry-delay 3 --retry-all-errors -k --resolve chat.family.example.net:443:127.0.0.1 https://chat.family.example.net/api/config
-          docker compose exec -T api python -c "import urllib.request;print(urllib.request.urlopen('http://127.0.0.1:8000/healthz').read().decode())"
+          docker compose exec -T --user 10001:10001 api python -c "import urllib.request;print(urllib.request.urlopen('http://127.0.0.1:8000/healthz').read().decode())"
           docker compose exec -T xmpp prosodyctl check config
           for attempt in $(seq 1 30); do
             if docker compose exec -T freeswitch fs_cli -H freeswitch -p "$(cat .secrets/esl)" -x status; then
@@ -58,12 +61,60 @@ jobs:
             sleep 2
           done
           docker compose exec -T freeswitch fs_cli -H freeswitch -p "$(cat .secrets/esl)" -x 'sofia status'
-          docker compose exec -T api python -c "from app.provision import reload_xml; assert reload_xml()"
+          docker compose exec -T --user 10001:10001 api python -c "from app.provision import reload_xml; assert reload_xml()"
+          # Confirm the *running* FreeSWITCH directory contains the canonical
+          # HA1 user record; never print the returned digest secret.
+          docker compose exec -T freeswitch sh -c 'test -s /usr/local/freeswitch/etc/freeswitch/directory/default.xml && grep -q "user id=\\\"1200\\\"" /usr/local/freeswitch/etc/freeswitch/directory/default.xml'
+          # Assert the effective live FreeSWITCH XML, not merely the file on disk.
+          docker compose exec -T freeswitch cat /usr/local/freeswitch/var/log/freeswitch/freeswitch.xml.fsxml | python3 scripts/diagnose-fsxml.py --assert-directory
+          echo "FreeSWITCH active directory lookup (secrets redacted):"
+          located="$(docker compose exec -T freeswitch fs_cli -H freeswitch -p "$(cat .secrets/esl)" -x 'xml_locate directory domain name family.example.net')"
+          if [[ "$located" == *'id="1200"'* ]]; then echo "User in active XML: yes"; else echo "User in active XML: no"; fi
+          unset located
+          echo "FreeSWITCH XML directory diagnosis:"
+          docker compose exec -T freeswitch sh -c 'id; ls -ld /usr/local/freeswitch/etc/freeswitch/directory /usr/local/freeswitch/etc/freeswitch/directory/default; ls -l /usr/local/freeswitch/etc/freeswitch/directory/default.xml'
+          docker compose exec -T freeswitch fs_cli -H freeswitch -p "$(cat .secrets/esl)" -x 'domain_exists family.example.net'
+          docker compose exec -T --user 10001:10001 freeswitch sh -c 'test -r /usr/local/freeswitch/etc/freeswitch/directory/default.xml'
+          account_status="$(docker compose exec -T freeswitch fs_cli -H freeswitch -p "$(cat .secrets/esl)" -x 'user_exists id 1200 family.example.net')"
+          echo "Runtime SIP user present: $account_status"
+          test "$account_status" = 'true'
+          ha1="$(docker compose exec -T freeswitch fs_cli -H freeswitch -p "$(cat .secrets/esl)" -x 'user_data 1200@family.example.net param a1-hash')"
+          if [[ ! "$ha1" =~ ^[0-9a-f]{32}$ ]]; then
+            echo "ERROR: FreeSWITCH active directory does not contain the expected HA1 record" >&2
+            exit 1
+          fi
+          unset ha1
           FAMICOM_TEST_PASSWORD=IntegrationStrongPassword12345 python3 scripts/smoke-xmpp.py family.example.net admin
-          docker compose exec -T api env FAMICOM_TEST_SIP=1 python -m app.smoke_sip
+          docker compose exec -T --user 10001:10001 api env FAMICOM_TEST_SIP=1 python -m app.smoke_sip
+          # Exercise a newly added CHILD account without restarting FreeSWITCH.
+          docker compose exec -T --user 10001:10001 api python -c 'from app.core import create_user; from app.provision import sync; create_user("childci","CI Child","child","CI-Integration-Child-Password-Long123","1201"); assert sync()'
+          test "$(docker compose exec -T freeswitch fs_cli -H freeswitch -p "$(cat .secrets/esl)" -x 'user_exists id 1201 family.example.net')" = true
+          test "$(docker compose exec -T freeswitch fs_cli -H freeswitch -p "$(cat .secrets/esl)" -x 'user_data 1201@family.example.net var outbound_allowed')" = false
+          docker compose exec -T --user 10001:10001 api env FAMICOM_TEST_SIP=1 FAMICOM_TEST_SIP_USERNAME=childci python -m app.smoke_sip
+          # A real coturn allocation proves the shared secret works across the
+          # authenticated API and TURN server; CI publishes only to loopback.
+          sed -i 's/^FAMICOM_TURN_ENABLED=false$/FAMICOM_TURN_ENABLED=true/' .env
+          docker compose --profile turn up -d --no-deps api turn
+          # Unlike `-n`, `turnserver -c` actually loads our REST auth config.
+          # The runtime config stays inside the isolated container tmpfs.
+          docker compose --profile turn exec -T turn sh -c 'test -s /run/famicom-turn/turnserver.conf'
+          docker compose --profile turn ps turn
+          curl --fail --silent --show-error --retry 15 --retry-delay 2 --retry-all-errors -k --resolve chat.family.example.net:443:127.0.0.1 https://chat.family.example.net/api/config > /dev/null
+          cookiejar="$(mktemp)"
+          icefile="$(mktemp)"
+          trap 'rm -f "$cookiejar" "$icefile"' EXIT
+          curl --fail --silent --show-error -k --resolve chat.family.example.net:443:127.0.0.1 -c "$cookiejar" -H 'Content-Type: application/json' -d '{"username":"admin","password":"IntegrationStrongPassword12345"}' https://chat.family.example.net/api/auth/login > /dev/null
+          curl --fail --silent --show-error -k --resolve chat.family.example.net:443:127.0.0.1 -b "$cookiejar" https://chat.family.example.net/api/telephony/ice > "$icefile"
+          python3 scripts/smoke-turn.py --ice-file "$icefile"
+          rm -f "$cookiejar" "$icefile"
+          trap - EXIT
       - name: Logs for failed startup
         if: failure()
-        run: docker compose logs --no-color --tail 80 || true
+        run: |
+          docker compose logs --no-color --tail 80 || true
+          docker compose --profile turn ps turn || true
+          docker compose --profile turn logs --no-color --tail 70 turn | sed -E 's/(static-auth-secret=)[^[:space:]]+/\\1[REDACTED]/g' || true
+          docker compose logs --no-color --since 5m freeswitch | grep -Ei 'auth failure|can.t find user|rejected|forbidden|error' | tail -60 || true
       - name: Cleanup
         if: always()
         run: docker compose down -v --remove-orphans || true
