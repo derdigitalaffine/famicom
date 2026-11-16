@@ -72,40 +72,12 @@ def configuration_xml() -> dict[str, str]:
             call_groups.append(CallGroup(extension=item["extension"], members=members))
     trunk_config = json.loads(saved["value"]) if saved else {}
     trunk = _trunk(trunk_config)
-    # Keep the canonical security render as input, but publish users using
-    # FreeSWITCH's proven domain/default/*.xml include layout. The root XML
-    # preprocessor loads each user as a sibling within <users>.
-    from xml.etree import ElementTree as ET
-    directory = ET.fromstring(render_directory(DOMAIN, users))
-    domain = directory.find("domain")
-    user_nodes = domain.find("./groups/group/users")
-    if user_nodes is None:
-        raise RuntimeError("Invalid canonical SIP directory structure")
-    users_file = ET.Element("include")
-    for item in list(user_nodes):
-        users_file.append(item)
-        user_nodes.remove(item)
-    ET.SubElement(user_nodes, "X-PRE-PROCESS", {"cmd": "include", "data": "default/*.xml"})
-    # Preserve FreeSWITCH's established default.xml structure byte-for-byte,
-    # rather than serializing the X-PRE-PROCESS directive through ElementTree.
-    # Only the user snippets are sourced from the strict canonical renderer.
-    from xml.sax.saxutils import escape as xml_escape
-    realm = xml_escape(DOMAIN, {'"': '&quot;'})
-    directory_domain = (
-        '<include>\n'
-        f'  <domain name="{realm}">\n'
-        '    <params>\n'
-        '      <param name="dial-string" value="{presence_id=${dialed_user}@${dialed_domain}}sofia/internal/${dialed_user}@${dialed_domain}"/>\n'
-        '    </params>\n'
-        '    <groups><group name="default"><users>\n'
-        '      <X-PRE-PROCESS cmd="include" data="default/*.xml"/>\n'
-        '    </users></group></groups>\n'
-        '  </domain>\n'
-        '</include>\n'
-    )
+    # Publish the canonical domain + user list as ONE XML fragment. Nested
+    # FreeSWITCH X-PRE-PROCESS includes are brittle under live reloads and
+    # were hiding otherwise-readable users from the active directory.
+    directory_document = render_directory(DOMAIN, users)
     return {
-        "directory/default.xml": directory_domain,
-        "directory/default/users.xml": ET.tostring(users_file, encoding="unicode") + "\n",
+        "directory/default.xml": directory_document,
         "dialplan/default.xml": render_dialplan(
             DOMAIN, groups=call_groups, conference_numbers=tuple(item["extension"] for item in rooms), trunk=trunk
         ),
@@ -129,8 +101,9 @@ def publish() -> None:
         files = configuration_xml()
         for name, content in files.items():
             atomic_write(PROVISION_DIR / name, content)
-        # The now-HA1-only users.xml is intentionally preserved. It is included
-        # by directory/default.xml and never contains an unhashed SIP secret.
+        # No second account copy: old Foundation/previous migration snippets
+        # are deleted after the canonical domain XML is atomically published.
+        (PROVISION_DIR / "directory/default/users.xml").unlink(missing_ok=True)
         for stale in ("dialplan/default/10-internal.xml", "dialplan/default/20-features.xml",
                       "dialplan/default/30-outbound.xml"):
             (PROVISION_DIR / stale).unlink(missing_ok=True)

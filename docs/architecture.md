@@ -52,3 +52,6 @@ The API image now pins **both UID and GID to 10001**, rather than relying on Lin
 
 ### Bootstrap CLI privilege boundary
 Docker `compose exec` runs as the image user, **not the user to which the entrypoint later drops privileges**. Running API account initialization as container root had created root-owned, mode-0640 XML unreadable to the PBX. All provisioning CLI/smoke invocations now use `docker compose exec -T --user 10001:10001 api ...`. Integration also verifies non-root readability of the generated directory and the effective `user_exists` lookup.
+
+### Canonical static user directory on FreeSWITCH
+To avoid reload ambiguity with nested `X-PRE-PROCESS` includes, `provision.py` writes the complete rendered domain and its included enabled `<user>` nodes into `directory/default.xml` in one atomic replacement; legacy `directory/default/users.xml` is unlinked after publication. This is the same strict renderer verified by the standalone security contracts. Live integration asserts the active user lookup and non-root readability of that one file.

@@ -29,7 +29,7 @@ def test_http_auth_and_xml_escaping(client, sandbox, monkeypatch):
     core.create_user("person", 'A & B "<Demo>"', "adult", "secure-testing-password", "1220")
     from app import provision
     provision.render_users()
-    data = (sandbox / "provision/directory/default/users.xml").read_text()
+    data = (sandbox / "provision/directory/default.xml").read_text()
     from xml.etree import ElementTree as ET
     root = ET.fromstring(data)
     assert root.find(".//user[@id='1220']") is not None
@@ -55,7 +55,7 @@ def test_disabled_user_hidden_and_no_external_trunk_for_children(client, sandbox
     child = core.create_user("child2", "Child", "child", "child-long-secret-value", "1202")
     csrf = login(client, "owner", "owner-long-secret-value")
     provision.render_users()
-    xml = (sandbox / "provision/directory/default/users.xml").read_text()
+    xml = (sandbox / "provision/directory/default.xml").read_text()
     assert 'name="outbound_allowed" value="false"' in xml
     assert 'name="outbound_allowed" value="true"' not in xml
     assert '<user id="1202">' in xml
@@ -132,7 +132,7 @@ def test_admin_outbound_permission_and_trunk_allowlist(client, sandbox):
     assert enabled.status_code == 200
     gateway = (sandbox/"provision/sip_profiles/external/famicom.xml").read_text()
     dialplan = (sandbox/"provision/dialplan/default.xml").read_text()
-    directory = (sandbox/"provision/directory/default/users.xml").read_text()
+    directory = (sandbox/"provision/directory/default.xml").read_text()
     assert "sofia/gateway/famicom/" in dialplan
     assert "0049631" in dialplan
     assert 'name="outbound_allowed" value="true"' in directory
@@ -165,7 +165,7 @@ def test_call_group_conference_and_child_authorization(client, sandbox):
     assert "conference-3001" in dialplan
     assert client.patch(f"/api/users/{child['id']}",json={"enabled":False},headers=headers).status_code == 200
     provision.publish()
-    directory = (sandbox/"provision/directory/default/users.xml").read_text()
+    directory = (sandbox/"provision/directory/default.xml").read_text()
     assert '<user id="1201">' not in directory
     dialplan = (sandbox/"provision/dialplan/default.xml").read_text()
     assert 'user/1201@' not in dialplan
