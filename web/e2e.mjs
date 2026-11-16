@@ -37,7 +37,7 @@ async function visit(label, viewport) {
       await page.getByRole('button', {name: 'Familie'}).click();
       await page.locator('.member-card').filter({hasText:'E2E Mitglied'}).waitFor({state:'visible'});
       const member = page.locator('.member-card').filter({hasText: 'E2E Mitglied'});
-      const extension = (await member.textContent()).match(/\\b[12][0-9]{3}\\b/);
+      const extension = (await member.textContent()).match(/[12][0-9]{3}/);
       assert(extension, 'New member missing a 4-digit SIP extension');
       await member.getByRole('button', {name:'Anrufen'}).click();
       await page.getByRole('heading', {name: 'Anrufe'}).waitFor();
