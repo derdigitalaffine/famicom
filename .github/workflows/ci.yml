@@ -37,7 +37,9 @@ jobs:
       - name: Test ncurses fallback and generated configuration
         run: ./scripts/check-bootstrap.sh
   integration:
-    if: github.event_name == 'pull_request'
+    # Run live integration on the active runtime branch even if the PR
+    # synchronize webhook is delayed; keep the expensive job out of main pushes.
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/feat/telephony-runtime-routing')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
