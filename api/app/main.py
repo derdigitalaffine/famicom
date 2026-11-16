@@ -13,7 +13,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 
-from . import core, provision
+from . import core, provision, ice as ice_module
 from telephony.render import CallGroup, SipTrunk
 
 COOKIE = "famicom_session"
@@ -105,6 +105,16 @@ def health():
 def config():
     return {"domain": core.DOMAIN, "xmpp_websocket": "/xmpp-websocket", "sip_websocket": "/sip-ws",
             "group_domain": "conference." + core.DOMAIN, "sip_domain": core.DOMAIN}
+
+@app.get("/api/telephony/ice")
+def ice_settings(response: Response, row=Depends(actor)):
+    """Same-origin, authenticated ICE config, never publicly cache credentials."""
+    response.headers["Cache-Control"] = "private, no-store, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    try:
+        return ice_module.ice_configuration(row["username"])
+    except RuntimeError as exc:
+        raise HTTPException(503, str(exc)) from exc
 
 @app.post("/api/auth/login")
 def login(payload: Login, response: Response, request: Request):

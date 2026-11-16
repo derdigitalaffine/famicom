@@ -64,6 +64,7 @@ mkdir -p .secrets deploy/generated/prosody deploy/generated/freeswitch/{director
 chmod 700 .secrets deploy/generated
 printf 'famicom:%s\n' "$(openssl rand -hex 32)" > .secrets/xmpp_http
 openssl rand -hex 32 > .secrets/esl
+openssl rand -hex 32 > .secrets/turn_rest
 python3 -c 'import base64,os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())' > .secrets/db_key
 openssl req -x509 -newkey rsa:3072 -nodes -days 30 -subj "/CN=$domain" \
   -addext "subjectAltName=DNS:$domain,DNS:conference.$domain" \
@@ -85,6 +86,11 @@ FAMICOM_HTTP_PORT=80
 FAMICOM_TLS_MODE=$mode
 FAMICOM_SECURE_COOKIES=true
 FAMICOM_FREESWITCH_IMAGE=yukiosaka/freeswitch:latest
+FAMICOM_TURN_IMAGE=coturn/coturn:4.18.0-r0
+FAMICOM_TURN_ENABLED=false
+FAMICOM_TURN_HOST=turn.$domain
+FAMICOM_TURN_BIND=127.0.0.1
+FAMICOM_TURN_ADVERTISE_IP=
 EOF
 chmod 600 .env
 

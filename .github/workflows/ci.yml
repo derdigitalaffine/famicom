@@ -22,14 +22,15 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - run: cd web && npm install --no-audit --no-fund && npm run build
+      - run: cd web && npm install --no-audit --no-fund && npm test && npm run build
   config:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - run: bash -n scripts/bootstrap.sh
-      - run: cp .env.example .env && mkdir -p .secrets deploy/generated/prosody deploy/generated/freeswitch/directory deploy/generated/freeswitch/dialplan deploy/generated/freeswitch/sip_profiles && touch .secrets/xmpp_http .secrets/esl .secrets/db_key .secrets/xmpp_tls_key .secrets/xmpp_tls_cert deploy/generated/Caddyfile deploy/generated/freeswitch/event_socket.conf.xml deploy/generated/freeswitch/switch.conf.xml deploy/generated/freeswitch/vars.xml
+      - run: cp .env.example .env && mkdir -p .secrets deploy/generated/prosody deploy/generated/freeswitch/directory deploy/generated/freeswitch/dialplan deploy/generated/freeswitch/sip_profiles && touch .secrets/xmpp_http .secrets/esl .secrets/turn_rest .secrets/db_key .secrets/xmpp_tls_key .secrets/xmpp_tls_cert deploy/generated/Caddyfile deploy/generated/freeswitch/event_socket.conf.xml deploy/generated/freeswitch/switch.conf.xml deploy/generated/freeswitch/vars.xml
       - run: docker compose config --quiet
+      - run: docker compose --profile turn config --quiet
   bootstrap:
     runs-on: ubuntu-latest
     steps:
@@ -90,10 +91,29 @@ jobs:
           test "$(docker compose exec -T freeswitch fs_cli -H freeswitch -p "$(cat .secrets/esl)" -x 'user_exists id 1201 family.example.net')" = true
           test "$(docker compose exec -T freeswitch fs_cli -H freeswitch -p "$(cat .secrets/esl)" -x 'user_data 1201@family.example.net var outbound_allowed')" = false
           docker compose exec -T --user 10001:10001 api env FAMICOM_TEST_SIP=1 FAMICOM_TEST_SIP_USERNAME=childci python -m app.smoke_sip
+          # A real coturn allocation proves the shared secret works across the
+          # authenticated API and TURN server; CI publishes only to loopback.
+          sed -i 's/^FAMICOM_TURN_ENABLED=false$/FAMICOM_TURN_ENABLED=true/' .env
+          docker compose --profile turn up -d --no-deps api turn
+          # Unlike `-n`, `turnserver -c` actually loads our REST auth config.
+          # The runtime config stays inside the isolated container tmpfs.
+          docker compose --profile turn exec -T turn sh -c 'test -s /run/famicom-turn/turnserver.conf'
+          docker compose --profile turn ps turn
+          curl --fail --silent --show-error --retry 15 --retry-delay 2 --retry-all-errors -k --resolve chat.family.example.net:443:127.0.0.1 https://chat.family.example.net/api/config > /dev/null
+          cookiejar="$(mktemp)"
+          icefile="$(mktemp)"
+          trap 'rm -f "$cookiejar" "$icefile"' EXIT
+          curl --fail --silent --show-error -k --resolve chat.family.example.net:443:127.0.0.1 -c "$cookiejar" -H 'Content-Type: application/json' -d '{"username":"admin","password":"IntegrationStrongPassword12345"}' https://chat.family.example.net/api/auth/login > /dev/null
+          curl --fail --silent --show-error -k --resolve chat.family.example.net:443:127.0.0.1 -b "$cookiejar" https://chat.family.example.net/api/telephony/ice > "$icefile"
+          python3 scripts/smoke-turn.py --ice-file "$icefile"
+          rm -f "$cookiejar" "$icefile"
+          trap - EXIT
       - name: Logs for failed startup
         if: failure()
         run: |
           docker compose logs --no-color --tail 80 || true
+          docker compose --profile turn ps turn || true
+          docker compose --profile turn logs --no-color --tail 70 turn | sed -E 's/(static-auth-secret=)[^[:space:]]+/\\1[REDACTED]/g' || true
           docker compose logs --no-color --since 5m freeswitch | grep -Ei 'auth failure|can.t find user|rejected|forbidden|error' | tail -60 || true
       - name: Cleanup
         if: always()

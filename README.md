@@ -70,3 +70,7 @@ CI baut und startet alle Compose-Dienste auf einem echten GitHub-Actions-Linux-R
 ### Bestehende Installation aktualisieren
 
 Bei Upgrade von der ersten Foundation auf die härtere Telefonanlage **nicht** erneut initialisieren. Stattdessen `./scripts/upgrade.sh` ausführen. Es sichert Daten und Konfiguration, aktualisiert Sofia-Profile, startet die Container neu und prüft die Provisionierung. Alte dreistellige Nummern werden migriert; alle SIP-Clients müssen ihre neue vierstellige Nummer verwenden. Siehe [PBX-Migrationsanleitung](docs/migration-001-pbx.md).
+
+### TURN / WebRTC für entfernte Browser
+
+TURN ist eine **optionale** Komponente: Standardbetrieb startet sie nicht und bindet Ports nur an `127.0.0.1`. Für einen kontrollierten lokalen oder VPN-Test `./scripts/turn-setup.sh` verwenden. Erst nach bewusster Port-/Firewallfreigabe und Eintrag der öffentlichen IP kann der Dienst über das Internet als Medienrelay funktionieren. Die API liefert für angemeldete Familienkonten zeitlich begrenzte HMAC-Zugangsdaten, keine dauerhaft verwendbaren Benutzerpasswörter. Hinweise zur Firewall, Portweiterleitung und Rücknahme stehen in [docs/turn.md](docs/turn.md).
