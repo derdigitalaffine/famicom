@@ -287,6 +287,10 @@ docker compose config --quiet
 docker compose up -d --build
 printf '%s\n' "$admin_pw" | docker compose exec -T --user 10001:10001 api python -m app.cli init-admin "$admin" "$admin_name"
 unset admin_pw xmpp_auth esl
+# Initial account provisioning happens after the first PBX startup. Restart
+# to force the configured directory and new SIP digest credentials to be loaded
+# from the beginning, rather than relying on a startup-time empty snapshot.
+docker compose restart freeswitch
 # FreeSWITCH can need several seconds after compose reports "started". Confirm
 # that the initial directory was actually loaded, not just written to disk.
 reload_ready=0
