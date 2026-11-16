@@ -30,6 +30,10 @@ def as_freeswitch_include(document: str) -> str:
     root = ET.fromstring(document)
     if root.tag != "include":
         raise ValueError("Expected FreeSWITCH include fragment")
+    # FreeSWITCH's legacy XML preprocessor consumes included fragments.
+    # Format each element on a separate line like the upstream vanilla files
+    # rather than feeding it one very long ElementTree-serialized line.
+    ET.indent(root, space="  ")
     return ET.tostring(root, encoding="unicode") + "\n"
 
 
