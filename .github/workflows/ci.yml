@@ -67,6 +67,7 @@ jobs:
           docker compose exec -T freeswitch sh -c 'id freeswitch 2>/dev/null || true'
           echo "FreeSWITCH XML compilation status:"
           docker compose exec -T freeswitch sh -c 'f=/usr/local/freeswitch/var/log/freeswitch/freeswitch.xml.fsxml; if test -s "$f"; then if grep -Fq family.example.net "$f"; then echo "domain in compiled XML: yes"; else echo "domain in compiled XML: no"; fi; if grep -Fq "1200" "$f"; then echo "user in compiled XML: yes"; else echo "user in compiled XML: no"; fi; else echo "Compiled XML absent"; fi'
+          docker compose exec -T freeswitch cat /usr/local/freeswitch/var/log/freeswitch/freeswitch.xml.fsxml | python3 scripts/diagnose-fsxml.py
           echo "FreeSWITCH active directory lookup (secrets redacted):"
           located="$(docker compose exec -T freeswitch fs_cli -H freeswitch -p "$(cat .secrets/esl)" -x 'xml_locate directory domain name family.example.net')"
           if [[ "$located" == *'id="1200"'* ]]; then echo "User in active XML: yes"; else echo "User in active XML: no"; fi
