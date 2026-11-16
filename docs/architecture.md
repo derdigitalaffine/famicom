@@ -55,3 +55,6 @@ Docker `compose exec` runs as the image user, **not the user to which the entryp
 
 ### Canonical static user directory on FreeSWITCH
 To avoid reload ambiguity with nested `X-PRE-PROCESS` includes, `provision.py` writes the complete rendered domain and its included enabled `<user>` nodes into `directory/default.xml` in one atomic replacement; legacy `directory/default/users.xml` is unlinked after publication. This is the same strict renderer verified by the standalone security contracts. Live integration asserts the active user lookup and non-root readability of that one file.
+
+### Explicit FreeSWITCH master configuration
+A live CI inspection identified that the bundled community image's effective `<section name="directory">` was empty even though the generated family domain XML existed, was readable and contained user 1200. FamiCom now binds a version-controlled `deploy/freeswitch/freeswitch.xml` master template. It explicitly includes the full `directory/*.xml` and `dialplan/*.xml` trees, as well as unchanged module configuration, chatplan and English language resources, following the official FreeSWITCH vanilla configuration. The live check continues to assert that the compiled directory section contains the canonical 1200 user; **a file on disk alone does not mean FreeSWITCH has loaded the account**.

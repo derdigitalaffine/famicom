@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<!-- Canonical FreeSWITCH master: preserve all core sections and load FamiCom
+     directory, isolated dialplans and Sofia profiles from their mount points. -->
+<document type="freeswitch/xml">
+  <X-PRE-PROCESS cmd="include" data="vars.xml"/>
+  <section name="configuration" description="Module Configuration">
+    <X-PRE-PROCESS cmd="include" data="autoload_configs/*.xml"/>
+  </section>
+  <section name="dialplan" description="Isolated FamiCom Dialplans">
+    <X-PRE-PROCESS cmd="include" data="dialplan/*.xml"/>
+  </section>
+  <section name="chatplan" description="Chatplan">
+    <X-PRE-PROCESS cmd="include" data="chatplan/*.xml"/>
+  </section>
+  <section name="directory" description="Canonical Family SIP Accounts">
+    <X-PRE-PROCESS cmd="include" data="directory/*.xml"/>
+  </section>
+  <section name="languages" description="Language Resources">
+    <X-PRE-PROCESS cmd="include" data="lang/en/*.xml"/>
+  </section>
+</document>

@@ -32,3 +32,9 @@ print("Directory sections:", len(directories))
 for section in directories:
     print("Directory section child tags:", ",".join(child.tag for child in section)[:300])
 walk(root)
+
+if "--assert-directory" in sys.argv:
+    active_domains = [d for sec in directories for d in sec.findall(".//domain") if d.get("name") == DOMAIN]
+    if not active_domains or not any(d.find(".//user[@id='1200']") is not None for d in active_domains):
+        raise SystemExit("No active canonical 1200 account in compiled directory section")
+    print("Compiled FreeSWITCH directory acceptance: PASS")
