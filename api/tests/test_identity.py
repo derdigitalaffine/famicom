@@ -181,4 +181,5 @@ def test_runtime_xml_includes_have_no_nested_xml_declarations(sandbox):
         assert not contents.lstrip().startswith("<?xml"), path
         assert contents.lstrip().startswith("<include"), path
     assert '<user id="1200"' in fragments["directory/default.xml"]
+    assert "\n  <domain " in fragments["directory/default.xml"]
     assert "famicom-internal" in fragments["dialplan/default.xml"]
