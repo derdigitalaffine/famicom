@@ -13,10 +13,11 @@ services:
       FAMICOM_XMPP_AUTH_FILE: /run/secrets/xmpp_http
       FAMICOM_ESL_PASSWORD_FILE: /run/secrets/esl
       FAMICOM_DB_KEY_FILE: /run/secrets/db_key
+      FAMICOM_TURN_SECRET_FILE: /run/secrets/turn_rest
     volumes:
       - famicom-data:/data
       - ./deploy/generated/freeswitch:/provision
-    secrets: [xmpp_http, esl, db_key]
+    secrets: [xmpp_http, esl, db_key, turn_rest]
     expose: ["8000"]
     networks: [private]
     healthcheck:
@@ -73,6 +74,27 @@ services:
     expose: ["5066", "8021"]
     networks: [private]
 
+  turn:
+    # Explicit opt-in: docker compose --profile turn up -d turn.
+    profiles: ["turn"]
+    image: ${FAMICOM_TURN_IMAGE:-coturn/coturn:4.18.0-r0}
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "/opt/famicom/turn-entrypoint.sh"]
+    environment:
+      FAMICOM_DOMAIN: ${FAMICOM_DOMAIN}
+      FAMICOM_TURN_ADVERTISE_IP: ${FAMICOM_TURN_ADVERTISE_IP:-}
+    volumes:
+      - ./deploy/coturn/turn-entrypoint.sh:/opt/famicom/turn-entrypoint.sh:ro
+    secrets: [turn_rest]
+    tmpfs:
+      - /run/famicom-turn:size=1m,mode=0700
+    security_opt: [no-new-privileges:true]
+    ports:
+      - "${FAMICOM_TURN_BIND:-127.0.0.1}:3478:3478/udp"
+      - "${FAMICOM_TURN_BIND:-127.0.0.1}:3478:3478/tcp"
+      - "${FAMICOM_TURN_BIND:-127.0.0.1}:49160-49179:49160-49179/udp"
+    networks: [private]
+
   web:
     build: ./web
     restart: unless-stopped
@@ -100,6 +122,8 @@ networks:
     internal: false
 
 secrets:
+  turn_rest:
+    file: ./.secrets/turn_rest
   xmpp_http:
     file: ./.secrets/xmpp_http
   esl:

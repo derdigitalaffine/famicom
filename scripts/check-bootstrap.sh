@@ -25,9 +25,11 @@ conf=p/"deploy/generated/prosody/famicom.cfg.lua"
 assert 'authentication = "http"' in conf.read_text()
 assert 'FileLine("/run/secrets/xmpp_http")' in conf.read_text()
 assert "TestSetupPasswordLong123" not in conf.read_text()
-for secret in ("db_key", "xmpp_tls_key", "xmpp_tls_cert", "esl", "xmpp_http"):
+for secret in ("db_key", "xmpp_tls_key", "xmpp_tls_cert", "esl", "xmpp_http", "turn_rest"):
     assert (p/".secrets"/secret).exists(), secret
 assert len((p/".secrets/esl").read_text().strip()) >= 32
+assert len((p/".secrets/turn_rest").read_text().strip()) >= 64
+assert "FAMICOM_TURN_ENABLED=false" in (p/".env").read_text()
 fs=p/"deploy/generated/freeswitch"
 for filename in fs.rglob("*.xml"):
     ET.parse(filename)

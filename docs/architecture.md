@@ -6,7 +6,7 @@
 - **Prosody 13**: XMPP (TCP/STARTTLS, WebSocket through Caddy, MUC, MAM, file sharing); `mod_auth_http` validates credentials against private API. No open user registration.
 - **FreeSWITCH 1.10**: native SIP, bridge, dialplan, conferences, PBX; API atomically writes XML directory and gateway files into a shared volume and requests `reloadxml` over an internal password-authenticated event socket.
 - **Caddy**: public HTTPS ingress, reverse proxies for `/api`, XMPP WebSocket, uploads and browser SIP-over-WebSocket; do not publish ESL.
-- **TURN**: future opt-in coturn (not shipped in initial foundation); mobile/remote WebRTC media requires tested NAT/TURN configuration.
+- **TURN**: optional coturn Docker Compose profile, HMAC/SHA-1 ephemeral REST credentials issued only to authenticated family members. Default host binding is loopback, no public exposure by default. NAT/remote media still require an administrator-provided external IPv4 and end-to-end testing.
 
 ## Security invariants
 - Server-side role checks; usernames constrained to ASCII alphanumeric/underscore with 3–32 characters; no case-colliding names; unique extensions.

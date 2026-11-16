@@ -52,6 +52,12 @@ for name, settings in {
     os.replace(temp,target)
 print('Sofia profile contexts and canonical digest realm upgraded.')
 PY
+# New Compose secret is required even when the TURN service is disabled.
+# Preserve existing shared secrets to avoid invalidating live TURN allocations.
+if [[ ! -s .secrets/turn_rest ]]; then
+  openssl rand -hex 32 > .secrets/turn_rest
+  chmod 644 .secrets/turn_rest
+fi
 docker compose config --quiet
 docker compose up -d --build
 # A changed dialplan context does not take effect on sofia reloadxml alone.
