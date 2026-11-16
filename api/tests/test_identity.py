@@ -170,3 +170,15 @@ def test_call_group_conference_and_child_authorization(client, sandbox):
     dialplan = (sandbox/"provision/dialplan/default.xml").read_text()
     assert 'user/1201@' not in dialplan
     assert client.delete("/api/admin/call-groups/6001",headers=headers).status_code == 200
+
+
+def test_runtime_xml_includes_have_no_nested_xml_declarations(sandbox):
+    """FreeSWITCH preprocessor inserts fragments into its single XML document."""
+    from app import provision
+    core.create_user("parent", "Parent", "admin", "strong-parent-password", "1200")
+    fragments = provision.configuration_xml()
+    for path, contents in fragments.items():
+        assert not contents.lstrip().startswith("<?xml"), path
+        assert contents.lstrip().startswith("<include"), path
+    assert '<user id="1200"' in fragments["directory/default.xml"]
+    assert "famicom-internal" in fragments["dialplan/default.xml"]

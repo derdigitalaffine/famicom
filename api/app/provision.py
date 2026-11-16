@@ -24,6 +24,15 @@ LOG = logging.getLogger(__name__)
 _LOCK = threading.RLock()
 
 
+def as_freeswitch_include(document: str) -> str:
+    """Strip XML declarations: these fragments are embedded in freeswitch.xml."""
+    import xml.etree.ElementTree as ET
+    root = ET.fromstring(document)
+    if root.tag != "include":
+        raise ValueError("Expected FreeSWITCH include fragment")
+    return ET.tostring(root, encoding="unicode") + "\n"
+
+
 def atomic_write(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(path.name + ".tmp")
@@ -75,14 +84,14 @@ def configuration_xml() -> dict[str, str]:
     # Publish the canonical domain + user list as ONE XML fragment. Nested
     # FreeSWITCH X-PRE-PROCESS includes are brittle under live reloads and
     # were hiding otherwise-readable users from the active directory.
-    directory_document = render_directory(DOMAIN, users)
+    directory_document = as_freeswitch_include(render_directory(DOMAIN, users))
     return {
         "directory/default.xml": directory_document,
-        "dialplan/default.xml": render_dialplan(
+        "dialplan/default.xml": as_freeswitch_include(render_dialplan(
             DOMAIN, groups=call_groups, conference_numbers=tuple(item["extension"] for item in rooms), trunk=trunk
-        ),
-        "dialplan/public.xml": render_public_dialplan(DOMAIN),
-        "sip_profiles/external/famicom.xml": render_gateway(trunk),
+        )),
+        "dialplan/public.xml": as_freeswitch_include(render_public_dialplan(DOMAIN)),
+        "sip_profiles/external/famicom.xml": as_freeswitch_include(render_gateway(trunk)),
     }
 
 
