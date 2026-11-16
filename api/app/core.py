@@ -101,14 +101,51 @@ def init_db() -> None:
           subject TEXT,
           created_at INTEGER NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS call_groups (
+          extension TEXT PRIMARY KEY CHECK (length(extension)=4),
+          name TEXT NOT NULL,
+          members_json TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS conference_rooms (
+          extension TEXT PRIMARY KEY CHECK (length(extension)=4),
+          name TEXT NOT NULL
+        );
         CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
         """)
+        con.execute("INSERT OR IGNORE INTO conference_rooms(extension,name) VALUES (?,?)",
+                    ("3000", "Familienkonferenz"))
+        # Additive migration; the first Foundation release issued 200–999 extensions.
+        # Convert them deterministically into 1200–1999 without discarding identities.
+        columns = {item["name"] for item in con.execute("PRAGMA table_info(users)")}
+        if "outbound_allowed" not in columns:
+            con.execute("ALTER TABLE users ADD COLUMN outbound_allowed INTEGER NOT NULL DEFAULT 0")
+        current = con.execute("SELECT id, extension FROM users ORDER BY id").fetchall()
+        used = {row["extension"] for row in current if re.fullmatch(r"[12][0-9]{3}", row["extension"])}
+        for row in current:
+            old = row["extension"]
+            if re.fullmatch(r"[12][0-9]{3}", old):
+                continue
+            preferred = "1" + old if re.fullmatch(r"[2-9][0-9]{2}", old) else None
+            new_extension = preferred if preferred and preferred not in used else next(
+                (str(value) for value in range(1200, 3000) if str(value) not in used), None
+            )
+            if not new_extension:
+                raise RuntimeError("No available 4-digit SIP extension for migration")
+            con.execute("UPDATE users SET extension=?,outbound_allowed=0 WHERE id=?",
+                        (new_extension, row["id"]))
+            con.execute("INSERT INTO audit(actor_id,action,subject,created_at) VALUES (NULL,?,?,?)",
+                        ("sip.extension.migrated", str(row["id"]) + ":" + old + "->" + new_extension,
+                         int(time.time())))
+            used.add(new_extension)
+        # Existing admins/adults are not implicitly permitted to place paid calls.
+        con.execute("UPDATE users SET outbound_allowed=0 WHERE role='child'")
 
 def public_user(row) -> dict:
     return {
         "id": row["id"], "username": row["username"], "display_name": row["display_name"],
         "jid": f"{row['username']}@{DOMAIN}", "role": row["role"],
-        "extension": row["extension"], "enabled": bool(row["enabled"])
+        "extension": row["extension"], "enabled": bool(row["enabled"]),
+        "outbound_allowed": bool(row["outbound_allowed"])
     }
 
 def check_username(username: str) -> str:
@@ -128,11 +165,11 @@ def create_user(username: str, display_name: str, role: str, password: str, exte
     with database() as con:
         if extension is None:
             existing = {r[0] for r in con.execute("SELECT extension FROM users")}
-            extension = next((str(i) for i in range(200, 999) if str(i) not in existing), None)
+            extension = next((str(i) for i in range(1200, 3000) if str(i) not in existing), None)
             if extension is None:
                 raise ValueError("No free extension")
-        if not re.fullmatch(r"[2-9][0-9]{2,4}", extension):
-            raise ValueError("Extension must be numeric (200–99999, first digit 2–9)")
+        if not re.fullmatch(r"[12][0-9]{3}", extension):
+            raise ValueError("SIP extensions must be between 1000 and 2999 (four digits)")
         sip_secret = secrets.token_urlsafe(32)
         cur = con.execute(
             "INSERT INTO users(username,display_name,role,password_hash,extension,sip_secret_cipher,created_at) VALUES (?,?,?,?,?,?,?)",

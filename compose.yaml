@@ -2,7 +2,9 @@ name: famicom
 
 services:
   api:
-    build: ./api
+    build:
+      context: .
+      dockerfile: api/Dockerfile
     restart: unless-stopped
     env_file: .env
     environment:
@@ -44,6 +46,9 @@ services:
     networks: [private]
 
   freeswitch:
+    # Supplementary group for API-owned 0640 generated PBX XML.
+    group_add:
+      - "10001"
     image: ${FAMICOM_FREESWITCH_IMAGE:-yukiosaka/freeswitch:latest}
     platform: linux/amd64
     restart: unless-stopped
@@ -55,6 +60,8 @@ services:
       - "${FAMICOM_SIP_BIND:-127.0.0.1}:5060:5060/tcp"
       - "${FAMICOM_SIP_BIND:-127.0.0.1}:20000-20199:20000-20199/udp"
     volumes:
+      # Stable upstream-compatible master XML with explicit section includes.
+      - ./deploy/freeswitch/freeswitch.xml:/usr/local/freeswitch/etc/freeswitch/freeswitch.xml:ro
       - ./deploy/generated/freeswitch/directory:/usr/local/freeswitch/etc/freeswitch/directory:ro
       - ./deploy/generated/freeswitch/dialplan:/usr/local/freeswitch/etc/freeswitch/dialplan:ro
       - ./deploy/generated/freeswitch/sip_profiles:/usr/local/freeswitch/etc/freeswitch/sip_profiles:ro

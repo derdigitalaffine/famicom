@@ -11,6 +11,10 @@ export default function Calls({ user, config, dialTarget, onIncoming }) {
   const [incoming, setIncoming] = useState(false);
   const [error, setError] = useState('');
   const [creds, setCreds] = useState(null);
+  const [directory, setDirectory] = useState({ groups: [], conferences: [] });
+  useEffect(() => {
+    api('/api/telephony/directory').then(setDirectory).catch(err => setError(err.message));
+  }, []);
   useEffect(() => { if (dialTarget) setDial(dialTarget); }, [dialTarget]);
   useEffect(() => () => { const current = instance.current; instance.current = null; if (current) { current.unregister().catch(() => {}); current.disconnect().catch(() => {}); } }, []);
   async function connect() {
@@ -46,7 +50,8 @@ export default function Calls({ user, config, dialTarget, onIncoming }) {
     try {
       if (!instance.current) throw new Error('Telefonie ist nicht verbunden');
       if (action === 'call') {
-        if (!/^(?:[2-9][0-9]{2,4}|0[0-9]{4,18})$/.test(dial)) throw new Error('Ungültige Rufnummer');
+        if (!/^(?:[12][0-9]{3}|3[0-9]{3}|6[0-9]{3}|90[0-9]{4,15})$/.test(dial))
+          throw new Error('Wähle eine interne Nebenstelle (1xxx/2xxx), Konferenz (3xxx), Gruppe (6xxx) oder 9 + erlaubte Provider-Rufnummer.');
         setState('wählt');
         await instance.current.call('sip:' + dial + '@' + config.domain);
       } else if (action === 'answer') {
@@ -98,6 +103,19 @@ export default function Calls({ user, config, dialTarget, onIncoming }) {
               {({ copied, copy }) => <Button mt="md" variant="light" color="gray" onClick={copy}>{copied ? 'Kopiert' : 'SIP-Passwort kopieren'}</Button>}
             </CopyButton>
           </>}
+        </Card>
+        <Card withBorder radius="xl" className="surface-card" p="xl">
+          <Title order={4} mb="sm">Anrufgruppen und Konferenzen</Title>
+          <Text c="dimmed" size="xs" mb="md">Kurzwahl antippen, um eine interne Gruppe oder Konferenz zu erreichen.</Text>
+          <Stack gap="xs">
+            {[...directory.groups.map(g => ({ ...g, type: 'Gruppe' })),
+              ...directory.conferences.map(c => ({ ...c, type: 'Konferenz' }))].map(item => (
+              <Group key={item.extension} justify="space-between" wrap="nowrap">
+                <div><Text fw={700} size="sm">{item.name}</Text><Text c="dimmed" size="xs">{item.type} · {item.extension}</Text></div>
+                <Button size="compact-sm" variant="light" leftSection={<IconPhone size={14}/>} onClick={() => setDial(item.extension)}>Wählen</Button>
+              </Group>
+            ))}
+          </Stack>
         </Card>
         <Alert icon={<IconShieldLock size={18}/>} color="blue" variant="light" title="Sichere Erreichbarkeit">
           Für Browser-Anrufe wird HTTPS/WSS benötigt. Das native SIP-Protokoll ist standardmäßig nur lokal freigegeben. Externe Anrufe bleiben bis zur Freigabe eines SIP-Providers gesperrt.

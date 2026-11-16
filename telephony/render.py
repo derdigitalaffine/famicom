@@ -19,6 +19,7 @@ ROOM = re.compile(r"^3[0-9]{3}$")
 DID = re.compile(r"^\+?[0-9]{6,15}$")
 PREFIX = re.compile(r"^0[0-9]{4,12}$")
 HEX = re.compile(r"^[0-9a-f]{32}$")
+PROVIDER_LOGIN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.@+-]{0,95}$")
 
 
 def check(value: str, pattern: re.Pattern, label: str) -> str:
@@ -104,7 +105,7 @@ class SipTrunk:
     def __post_init__(self):
         check(self.name, NAME, "gateway name")
         check(self.proxy, DOMAIN, "SIP proxy")
-        check(self.username, NAME, "gateway account")
+        check(self.username, PROVIDER_LOGIN, "gateway account")
         secret(self.password)
         if self.enabled and not self.allowed_prefixes:
             raise ValueError("Enabled trunk requires allowlist")

@@ -37,7 +37,7 @@ Das Skript verwendet `whiptail` für einen ncurses-artigen Dialog (falls vorhand
 
 Mit dem Bootstrap-Admin in der PWA unter **Verwaltung** neue Familienmitglieder anlegen. Jedes Konto besitzt:
 - XMPP-JID `benutzer@domain`; Passwort = Kontopasswort; Familienkontakte lassen sich in der XMPP-Weboberfläche direkt nach Namen suchen;
-- SIP-Nebenstelle (standardmäßig ab 200) mit **separatem** hochentropischem SIP-Kennwort;
+- SIP-Nebenstelle (vierstellig, standardmäßig ab 1200) mit **separatem** hochentropischem SIP-Kennwort;
 - Rolle `admin`, `adult` oder `child`.
 
 In der PWA unter **Anrufe** das SIP-Kennwort auf eigenen Wunsch abrufen und in Linphone, Groundwire, Zoiper, MicroSIP etc. verwenden. Native XMPP-Apps: Conversations, Monal, Snikket, Gajim (Standardprotokoll, konkrete Funktionalität abhängig vom Client). Der Browserchat verwendet Converse.js, welches ggf. für den Chat nochmals das XMPP-Passwort verlangt; keine dauerhafte Speicherung des Kontopassworts durch die FamiCom-API.
@@ -66,3 +66,7 @@ Siehe [AGENTS.md](AGENTS.md), [Architektur](docs/architecture.md) und [Roadmap](
 
 ### Live-Integration
 CI baut und startet alle Compose-Dienste auf einem echten GitHub-Actions-Linux-Runner. Der Live-Test prüft HTTPS-/API-Erreichbarkeit, Prosody-Konfiguration, authentifizierte FreeSWITCH-Diagnose samt `reloadxml`, außerdem XMPP-STARTTLS mit einem echten SASL-Login und einem bewusst falschen Passwort sowie SIP-REGISTER inklusive Challenge/Digest mit einer tatsächlich provisionierten Nebenstelle. Dieser Test nutzt nur ein kurzlebiges, selbstsigniertes Testzertifikat; er ersetzt **keine** Sicherheits-/Interop-Zertifizierung.
+
+### Bestehende Installation aktualisieren
+
+Bei Upgrade von der ersten Foundation auf die härtere Telefonanlage **nicht** erneut initialisieren. Stattdessen `./scripts/upgrade.sh` ausführen. Es sichert Daten und Konfiguration, aktualisiert Sofia-Profile, startet die Container neu und prüft die Provisionierung. Alte dreistellige Nummern werden migriert; alle SIP-Clients müssen ihre neue vierstellige Nummer verwenden. Siehe [PBX-Migrationsanleitung](docs/migration-001-pbx.md).
