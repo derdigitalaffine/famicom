@@ -13,7 +13,7 @@
     <X-PRE-PROCESS cmd="include" data="chatplan/*.xml"/>
   </section>
   <section name="directory" description="Canonical Family SIP Accounts">
-    <X-PRE-PROCESS cmd="include" data="directory/default.xml"/>
+    <X-PRE-PROCESS cmd="include" data="/usr/local/freeswitch/etc/freeswitch/directory/default.xml"/>
   </section>
   <section name="languages" description="Language Resources">
     <X-PRE-PROCESS cmd="include" data="lang/en/*.xml"/>
