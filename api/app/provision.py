@@ -118,36 +118,83 @@ def publish() -> None:
             (PROVISION_DIR / stale).unlink(missing_ok=True)
 
 
-def _receive_packet(stream: socket.socket) -> bytes:
-    data = b""
-    while b"\n\n" not in data and b"\r\n\r\n" not in data and len(data) < 50000:
-        chunk = stream.recv(8192)
-        if not chunk:
-            break
-        data += chunk
-    return data
+class ESLFrames:
+    """Framed FreeSWITCH Event Socket reader with split-recv support.
+
+    A header delimiter does not mark end of an API response: the body is
+    signaled by Content-Length and may arrive in a later TCP segment. Preserve
+    leftover bytes for subsequent responses, without exposing ESL secrets.
+    """
+    def __init__(self, stream: socket.socket):
+        self.stream = stream
+        self.pending = b""
+
+    def read(self) -> tuple[dict[str, str], bytes]:
+        while True:
+            a = self.pending.find(b"\r\n\r\n")
+            b = self.pending.find(b"\n\n")
+            choices = [(a, 4)] if a >= 0 else []
+            if b >= 0:
+                choices.append((b, 2))
+            if choices:
+                stop, width = min(choices)
+                break
+            if len(self.pending) > 65536:
+                raise ValueError("Oversized ESL header")
+            chunk = self.stream.recv(8192)
+            if not chunk:
+                raise ConnectionError("Unexpected ESL EOF")
+            self.pending += chunk
+        raw_headers = self.pending[:stop].decode("utf-8", errors="replace")
+        headers = {}
+        for line in raw_headers.splitlines():
+            if ":" in line:
+                key, value = line.split(":", 1)
+                headers[key.strip().lower()] = value.strip()
+        raw_length = headers.get("content-length", "0")
+        if not raw_length.isdecimal():
+            raise ValueError("Invalid ESL Content-Length")
+        length = int(raw_length)
+        if length > 1024 * 1024:
+            raise ValueError("Oversized ESL response")
+        body_and_rest = self.pending[stop+width:]
+        while len(body_and_rest) < length:
+            chunk = self.stream.recv(8192)
+            if not chunk:
+                raise ConnectionError("Unexpected ESL body EOF")
+            body_and_rest += chunk
+        body = body_and_rest[:length]
+        self.pending = body_and_rest[length:]
+        return headers, body
 
 
 def reload_xml() -> bool:
-    """One authenticated ESL control channel; never exposed outside Compose."""
+    """Authenticated private ESL with complete frame handling."""
     password = secret_file("FAMICOM_ESL_PASSWORD_FILE")
     if not password:
         return False
     try:
         with socket.create_connection(("freeswitch", 8021), timeout=3) as conn:
-            conn.settimeout(5)
-            _receive_packet(conn)
+            conn.settimeout(6)
+            reader = ESLFrames(conn)
+            greeting, _ = reader.read()
+            if greeting.get("content-type") != "auth/request":
+                return False
             conn.sendall(("auth " + password + "\n\n").encode())
-            if b"+OK accepted" not in _receive_packet(conn):
+            auth_headers, _ = reader.read()
+            if "+OK accepted" not in auth_headers.get("reply-text", ""):
                 return False
             conn.sendall(b"api reloadxml\n\n")
-            result = _receive_packet(conn)
-            if b"+OK" not in result or b"-ERR" in result:
+            headers, body = reader.read()
+            if headers.get("content-type") != "api/response":
+                return False
+            response = body.strip()
+            if not response.startswith(b"+OK") or b"-ERR" in response:
                 return False
             conn.sendall(b"api sofia profile external rescan\n\n")
-            _receive_packet(conn)
+            reader.read()
             return True
-    except (OSError, TimeoutError) as exc:
+    except (OSError, TimeoutError, ValueError, ConnectionError) as exc:
         LOG.warning("FreeSWITCH XML reload unavailable (%s)", type(exc).__name__)
         return False
 
